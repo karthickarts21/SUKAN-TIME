@@ -1,5 +1,5 @@
 {
-  "name": "Sukan Time Calculator",
+  "name": "Time Calculator",
   "description": "A clean, minimalist desktop-first month-wise time sheet and duration calculator application.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

@@ -27,10 +27,11 @@ export const Header: React.FC<HeaderProps> = ({
         />
       </div>
 
-      {/* CENTER: SUKAN TIME CALCULATOR */}
-      <div className="text-center">
+      {/* CENTER: TIME CALCULATOR */}
+      <div className="flex items-center justify-center gap-3">
+        <img src="/favicon.svg" alt="Time Calculator Logo" className="w-8 h-8 object-contain" />
         <h1 className="text-2xl md:text-3xl font-black uppercase tracking-widest text-black">
-          SUKAN TIME CALCULATOR
+          TIME CALCULATOR
         </h1>
       </div>
 
