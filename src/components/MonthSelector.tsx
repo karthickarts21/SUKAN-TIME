@@ -4,36 +4,45 @@ import { MONTHS } from '../utils/storage';
 interface MonthSelectorProps {
   selectedMonth: string;
   onSelectMonth: (month: string) => void;
+  monthsWithData?: string[];
 }
 
 export const MonthSelector: React.FC<MonthSelectorProps> = ({
   selectedMonth,
   onSelectMonth,
+  monthsWithData = [],
 }) => {
   return (
-    <div className="w-full mb-8">
-      <div className="text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
-        SELECT MONTH:
-      </div>
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-1 bg-gray-100 p-1 border border-black">
+    <nav className="w-full my-4 overflow-x-auto pb-1" aria-label="Month Navigation">
+      <div className="flex items-center gap-1 p-1 bg-neutral-100/90 rounded-xl min-w-max border border-neutral-200/70">
         {MONTHS.map((month) => {
           const isSelected = month === selectedMonth;
+          const hasData = monthsWithData.includes(month);
+
           return (
             <button
               key={month}
               type="button"
               onClick={() => onSelectMonth(month)}
-              className={`py-1.5 px-1 text-[11px] font-bold tracking-tight uppercase transition-all duration-150 border ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 isSelected
-                  ? 'bg-black text-white border-black shadow-sm font-extrabold'
-                  : 'bg-white text-black border-gray-300 hover:border-black hover:bg-gray-50'
+                  ? 'bg-white text-neutral-900 shadow-xs font-bold'
+                  : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200/60'
               }`}
             >
-              {month.slice(0, 3)}
+              <span>{month.slice(0, 3)}</span>
+              {hasData && (
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    isSelected ? 'bg-neutral-900' : 'bg-emerald-600'
+                  }`}
+                  title={`${month} has saved entries`}
+                />
+              )}
             </button>
           );
         })}
       </div>
-    </div>
+    </nav>
   );
 };

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Clock, RotateCcw } from 'lucide-react';
 import { Period, TimeEntry } from '../types';
 import { calculateDuration } from '../utils/timeCalculator';
 
@@ -7,15 +8,33 @@ interface TimeSectionProps {
   entry: TimeEntry;
   onChange: (updated: TimeEntry) => void;
   onClearSection: () => void;
+  title?: string;
+  subtitle?: string;
 }
+
+const DEFAULT_METADATA = [
+  { title: 'Morning', subtitle: 'Session 1' },
+  { title: 'Afternoon', subtitle: 'Session 2' },
+  { title: 'Evening', subtitle: 'Session 3' },
+  { title: 'Overtime', subtitle: 'Night' },
+];
 
 export const TimeSection: React.FC<TimeSectionProps> = ({
   sectionIndex,
   entry,
   onChange,
   onClearSection,
+  title,
+  subtitle,
 }) => {
   const duration = calculateDuration(entry);
+  const meta = DEFAULT_METADATA[sectionIndex] || {
+    title: `Session 0${sectionIndex + 1}`,
+    subtitle: `Session ${sectionIndex + 1}`,
+  };
+
+  const displayTitle = title || meta.title;
+  const displaySubtitle = subtitle || meta.subtitle;
 
   const handleStartTimeChange = (val: string) => {
     onChange({ ...entry, startTime: val });
@@ -35,7 +54,7 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
     onChange({ ...entry, endPeriod: nextPeriod });
   };
 
-  // Helper to auto-format input like "930" -> "09:30" on blur
+  // Auto-format input like "930" -> "09:30" or "9" -> "09:00" on blur
   const autoFormatTimeOnBlur = (val: string, field: 'startTime' | 'endTime') => {
     let clean = val.replace(/[^\d:]/g, '').trim();
     if (!clean) return;
@@ -47,12 +66,10 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
         if (h < 1) h = 1;
         clean = `${h.toString().padStart(2, '0')}:00`;
       } else if (clean.length === 3) {
-        // e.g. "930" -> "09:30"
         let h = parseInt(clean.substring(0, 1), 10);
         let m = parseInt(clean.substring(1), 10);
         clean = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
       } else if (clean.length === 4) {
-        // e.g. "1030" -> "10:30"
         let h = parseInt(clean.substring(0, 2), 10);
         let m = parseInt(clean.substring(2), 10);
         if (h > 12) h = 12;
@@ -72,88 +89,107 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
     onChange({ ...entry, [field]: clean });
   };
 
+  const hasData = !!(entry.startTime || entry.endTime);
+
   return (
-    <div className="flex-1 min-w-[210px] border border-black p-3 bg-white flex flex-col justify-between space-y-3 shadow-sm">
-      <div className="flex items-center justify-between border-b border-gray-200 pb-1.5 mb-0.5">
-        <span className="font-extrabold text-xs uppercase tracking-wider text-black">
-          SECTION {sectionIndex + 1}
-        </span>
-        {(entry.startTime || entry.endTime) && (
-          <button
-            type="button"
-            onClick={onClearSection}
-            className="text-[10px] uppercase font-bold text-gray-500 hover:text-black underline"
-            title="Reset this section"
-          >
-            Clear
-          </button>
-        )}
-      </div>
+    <div className="bg-white border border-neutral-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between transition-all hover:border-neutral-300">
+      <div>
+        {/* COMPACT CARD HEADER */}
+        <div className="flex items-center justify-between gap-1 pb-2 mb-2 border-b border-neutral-100">
+          <div className="flex items-center gap-1.5">
+            <span className="w-5 h-5 rounded-md bg-neutral-900 text-white font-mono text-[10px] font-bold flex items-center justify-center">
+              {sectionIndex + 1}
+            </span>
+            <div>
+              <h2 className="text-xs sm:text-sm font-bold text-neutral-900 leading-none">
+                {displayTitle}
+              </h2>
+              <span className="text-[10px] text-neutral-400">{displaySubtitle}</span>
+            </div>
+          </div>
 
-      {/* IN TIME ROW */}
-      <div className="flex items-center justify-between gap-1.5">
-        <label className="font-bold text-xs uppercase tracking-wide text-black whitespace-nowrap">
-          IN TIME
-        </label>
-        <div className="flex items-center gap-1 flex-1 justify-end">
-          <input
-            type="text"
-            placeholder="09:00"
-            value={entry.startTime}
-            onChange={(e) => handleStartTimeChange(e.target.value)}
-            onBlur={(e) => autoFormatTimeOnBlur(e.target.value, 'startTime')}
-            className="w-20 border border-black px-1.5 py-1 text-center font-mono text-sm bg-white text-black font-bold focus:outline-none focus:ring-1 focus:ring-black"
-          />
-          <button
-            type="button"
-            onClick={handleStartPeriodToggle}
-            className={`w-10 py-1 px-0.5 border border-black text-[11px] font-black uppercase text-center transition-colors ${
-              entry.startPeriod === 'AM'
-                ? 'bg-black text-white'
-                : 'bg-white text-black hover:bg-gray-100'
-            }`}
-          >
-            {entry.startPeriod}
-          </button>
+          {hasData && (
+            <button
+              type="button"
+              onClick={onClearSection}
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-neutral-400 hover:text-neutral-800 bg-neutral-100 hover:bg-neutral-200 rounded transition-colors"
+              title="Clear this session"
+            >
+              <RotateCcw className="w-2.5 h-2.5" />
+              <span>Clear</span>
+            </button>
+          )}
         </div>
-      </div>
 
-      {/* OUT TIME ROW */}
-      <div className="flex items-center justify-between gap-1.5">
-        <label className="font-bold text-xs uppercase tracking-wide text-black whitespace-nowrap">
-          OUT TIME
-        </label>
-        <div className="flex items-center gap-1 flex-1 justify-end">
-          <input
-            type="text"
-            placeholder="06:30"
-            value={entry.endTime}
-            onChange={(e) => handleEndTimeChange(e.target.value)}
-            onBlur={(e) => autoFormatTimeOnBlur(e.target.value, 'endTime')}
-            className="w-20 border border-black px-1.5 py-1 text-center font-mono text-sm bg-white text-black font-bold focus:outline-none focus:ring-1 focus:ring-black"
-          />
-          <button
-            type="button"
-            onClick={handleEndPeriodToggle}
-            className={`w-10 py-1 px-0.5 border border-black text-[11px] font-black uppercase text-center transition-colors ${
-              entry.endPeriod === 'PM'
-                ? 'bg-black text-white'
-                : 'bg-white text-black hover:bg-gray-100'
-            }`}
-          >
-            {entry.endPeriod}
-          </button>
+        {/* INPUTS CONTAINER - COMPACT HEIGHT */}
+        <div className="space-y-2">
+          {/* START TIME */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-0.5">
+              START TIME
+            </label>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                placeholder="09:00"
+                value={entry.startTime}
+                onChange={(e) => handleStartTimeChange(e.target.value)}
+                onBlur={(e) => autoFormatTimeOnBlur(e.target.value, 'startTime')}
+                className="h-9 flex-1 min-w-0 bg-neutral-50/80 border border-neutral-200 hover:border-neutral-300 focus:bg-white focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 rounded-lg px-2.5 text-center font-mono text-sm font-semibold text-neutral-900 placeholder:text-neutral-400 tabular-nums transition-colors"
+                aria-label={`${displayTitle} Start Time`}
+              />
+              <button
+                type="button"
+                onClick={handleStartPeriodToggle}
+                className="h-9 w-12 rounded-lg font-mono font-bold text-xs tracking-wider uppercase transition-all bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-900 shadow-2xs cursor-pointer flex items-center justify-center"
+                title="Click to toggle AM / PM"
+              >
+                {entry.startPeriod}
+              </button>
+            </div>
+          </div>
+
+          {/* END TIME */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-0.5">
+              END TIME
+            </label>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                placeholder="01:00"
+                value={entry.endTime}
+                onChange={(e) => handleEndTimeChange(e.target.value)}
+                onBlur={(e) => autoFormatTimeOnBlur(e.target.value, 'endTime')}
+                className="h-9 flex-1 min-w-0 bg-neutral-50/80 border border-neutral-200 hover:border-neutral-300 focus:bg-white focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 rounded-lg px-2.5 text-center font-mono text-sm font-semibold text-neutral-900 placeholder:text-neutral-400 tabular-nums transition-colors"
+                aria-label={`${displayTitle} End Time`}
+              />
+              <button
+                type="button"
+                onClick={handleEndPeriodToggle}
+                className="h-9 w-12 rounded-lg font-mono font-bold text-xs tracking-wider uppercase transition-all bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-900 shadow-2xs cursor-pointer flex items-center justify-center"
+                title="Click to toggle AM / PM"
+              >
+                {entry.endPeriod}
+              </button>
+            </div>
+          </div>
+
+          {/* WORKED TIME - DIRECTLY FOLLOWING END TIME */}
+          <div className="pt-0.5">
+            <div className="bg-neutral-50/90 rounded-lg p-2 border border-neutral-200/80 flex items-center justify-between">
+              <div>
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 leading-tight">
+                  WORKED TIME
+                </span>
+                <span className="text-[9px] text-neutral-400">Duration</span>
+              </div>
+              <span className="font-mono font-bold text-base text-neutral-900 tabular-nums tracking-tight">
+                {duration.formatted}
+              </span>
+            </div>
+          </div>
         </div>
-      </div>
-
-      {/* SUB TOTAL HOURS = RESULT ROW */}
-      <div className="pt-1.5 border-t border-gray-200 flex items-center justify-between mt-1">
-        <span className="font-extrabold text-[11px] uppercase tracking-wider text-black">
-          SUB TOTAL HOURS =
-        </span>
-        <span className="font-mono font-black text-base text-black bg-gray-50 px-2 py-0.5 border border-gray-300">
-          {duration.formatted}
-        </span>
       </div>
     </div>
   );

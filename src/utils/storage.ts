@@ -17,20 +17,21 @@ export const MONTHS = [
   'DECEMBER',
 ] as const;
 
+/**
+ * Creates an empty time entry for a specific session index:
+ * - Index 0 (Morning): AM -> PM (Empty times)
+ * - Index 1 (Afternoon): PM -> PM (Empty times)
+ * - Index 2 (Evening): PM -> PM (Empty times)
+ * - Index 3 (Overtime): PM -> PM (Empty times)
+ */
 export function createEmptyTimeEntry(index: number = 0): TimeEntry {
+  const isPM = index === 1 || index === 2 || index === 3;
   return {
     startTime: '',
-    startPeriod: index === 1 ? 'PM' : 'AM',
+    startPeriod: isPM ? 'PM' : 'AM',
     endTime: '',
     endPeriod: 'PM',
   };
-}
-
-export function createSampleTimeEntry(index: number): TimeEntry {
-  if (index === 0) {
-    return { startTime: '09:00', startPeriod: 'AM', endTime: '06:30', endPeriod: 'PM' };
-  }
-  return createEmptyTimeEntry(index);
 }
 
 export function createDefaultMonthData(): MonthData {
@@ -38,13 +39,13 @@ export function createDefaultMonthData(): MonthData {
   return {
     date: today,
     sections: [
-      createSampleTimeEntry(0),
+      createEmptyTimeEntry(0),
       createEmptyTimeEntry(1),
       createEmptyTimeEntry(2),
       createEmptyTimeEntry(3),
     ],
     dailyEntries: {},
-    lastSavedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    lastSavedAt: undefined,
   };
 }
 
@@ -54,7 +55,6 @@ export function createInitialStorage(): AppStorage {
     months[month] = createDefaultMonthData();
   });
 
-  // Default to current month or JUNE as in template
   const currentMonthIdx = new Date().getMonth(); // 0 - 11
   const defaultMonth = MONTHS[currentMonthIdx] || 'JUNE';
 
@@ -94,12 +94,46 @@ export function loadStorage(): AppStorage {
             current[2] || createEmptyTimeEntry(2),
             current[3] || createEmptyTimeEntry(3),
           ];
-        } else {
-          // Ensure Section 2 (index 1) startPeriod defaults to PM if not set or empty
-          if (parsed.months[m].sections[1] && parsed.months[m].sections[1].startPeriod === 'AM' && !parsed.months[m].sections[1].startTime) {
+        }
+
+        // Remove old default sample 09:00 - 06:30 if present in morning session
+        if (
+          parsed.months[m].sections[0]?.startTime === '09:00' &&
+          parsed.months[m].sections[0]?.endTime === '06:30'
+        ) {
+          parsed.months[m].sections[0].startTime = '';
+          parsed.months[m].sections[0].endTime = '';
+        }
+
+        // Ensure Afternoon (index 1) and Evening (index 2) default to PM for both start and end
+        if (parsed.months[m].sections[1]) {
+          if (!parsed.months[m].sections[1].startTime) {
             parsed.months[m].sections[1].startPeriod = 'PM';
           }
+          if (!parsed.months[m].sections[1].endTime) {
+            parsed.months[m].sections[1].endPeriod = 'PM';
+          }
         }
+
+        if (parsed.months[m].sections[2]) {
+          if (!parsed.months[m].sections[2].startTime) {
+            parsed.months[m].sections[2].startPeriod = 'PM';
+          }
+          if (!parsed.months[m].sections[2].endTime) {
+            parsed.months[m].sections[2].endPeriod = 'PM';
+          }
+        }
+
+        // Ensure Overtime (index 3) defaults to PM for both start and end
+        if (parsed.months[m].sections[3]) {
+          if (!parsed.months[m].sections[3].startTime) {
+            parsed.months[m].sections[3].startPeriod = 'PM';
+          }
+          if (!parsed.months[m].sections[3].endTime) {
+            parsed.months[m].sections[3].endPeriod = 'PM';
+          }
+        }
+
         // Check daily entries sections
         if (parsed.months[m].dailyEntries) {
           Object.keys(parsed.months[m].dailyEntries).forEach((dayKey) => {
@@ -113,9 +147,6 @@ export function loadStorage(): AppStorage {
                   s[2] || createEmptyTimeEntry(2),
                   s[3] || createEmptyTimeEntry(3),
                 ];
-              }
-              if (entry.sections[1] && entry.sections[1].startPeriod === 'AM' && !entry.sections[1].startTime) {
-                entry.sections[1].startPeriod = 'PM';
               }
             }
           });
@@ -158,7 +189,7 @@ export function clearCurrentMonthData(data: AppStorage, month: string): AppStora
         createEmptyTimeEntry(3),
       ],
       dailyEntries: {},
-      lastSavedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      lastSavedAt: undefined,
     },
   };
 

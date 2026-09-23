@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { ActionControls } from './components/ActionControls';
+import React, { useState } from 'react';
+import { ConfirmationModal } from './components/ConfirmationModal';
 import { DateSelector } from './components/DateSelector';
 import { DayRecordsTable } from './components/DayRecordsTable';
 import { Header } from './components/Header';
-import { MonthSelector } from './components/MonthSelector';
 import { TimeSection } from './components/TimeSection';
 import { TotalSection } from './components/TotalSection';
 import { DayRecord, TimeEntry } from './types';
@@ -12,15 +11,33 @@ import {
   createEmptyTimeEntry,
   loadStorage,
   MONTHS,
-  resetAllStorageData,
   saveStorage,
 } from './utils/storage';
 import { calculateTotalDuration } from './utils/timeCalculator';
-import { exportMonthExcelReport, exportOverallExcelReport } from './utils/excelExporter';
+import { exportMonthExcelReport } from './utils/excelExporter';
+import { getYearFromDate, isSunday } from './utils/dateUtils';
+import { Plus, X } from 'lucide-react';
 
 export default function App() {
   const [appState, setAppState] = useState(() => loadStorage());
   const [lastSavedNotice, setLastSavedNotice] = useState<string>('');
+
+  // In-app confirmation modal state for Clear Month action
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmLabel: '',
+    isDanger: true,
+    onConfirm: () => {},
+  });
 
   const currentMonth = appState.selectedMonth || 'JUNE';
   const monthData = appState.months[currentMonth] || {
@@ -28,6 +45,12 @@ export default function App() {
     sections: [createEmptyTimeEntry(0), createEmptyTimeEntry(1), createEmptyTimeEntry(2), createEmptyTimeEntry(3)],
     dailyEntries: {},
   };
+
+  // Check if Section 4 has data to decide initial visibility
+  const [showSection4, setShowSection4] = useState<boolean>(() => {
+    const s4 = monthData.sections[3];
+    return !!(s4?.startTime || s4?.endTime);
+  });
 
   // Extract active day number (1-31) from date string
   const currentDayNumber = (() => {
@@ -41,365 +64,514 @@ export default function App() {
     return 1;
   })();
 
-  // Helper to persist state to local storage and update state
-  const updateAndPersistState = (updater: (prev: typeof appState) => typeof appState) => {
+  const currentYear = getYearFromDate(monthData.date);
+  const isCurrentSunday = isSunday(currentDayNumber, currentMonth, currentYear);
+
+  const hasSavedDataForCurrentDay = !!monthData.dailyEntries?.[currentDayNumber];
+
+  // Updates single section and auto-persists to localStorage
+  const handleSectionChange = (sectionIndex: number, updated: TimeEntry) => {
     setAppState((prev) => {
-      const next = updater(prev);
-      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      if (next.months[next.selectedMonth]) {
-        next.months[next.selectedMonth].lastSavedAt = timestamp;
-      }
-      saveStorage(next);
-      setLastSavedNotice(timestamp);
-      return next;
+      const existingMonth = prev.months[currentMonth] || {
+        date: new Date().toISOString().split('T')[0],
+        sections: [createEmptyTimeEntry(0), createEmptyTimeEntry(1), createEmptyTimeEntry(2), createEmptyTimeEntry(3)],
+        dailyEntries: {},
+      };
+
+      const newSections = [...existingMonth.sections] as [TimeEntry, TimeEntry, TimeEntry, TimeEntry];
+      newSections[sectionIndex] = updated;
+
+      const nextState = {
+        ...prev,
+        months: {
+          ...prev.months,
+          [currentMonth]: {
+            ...existingMonth,
+            sections: newSections,
+          },
+        },
+      };
+
+      saveStorage(nextState);
+      return nextState;
     });
   };
 
-  // Handle month selection change
-  const handleSelectMonth = (newMonth: string) => {
-    updateAndPersistState((prev) => ({
-      ...prev,
-      selectedMonth: newMonth,
-    }));
+  // Clear single section
+  const handleClearSingleSection = (sectionIndex: number) => {
+    const cleared = createEmptyTimeEntry(sectionIndex);
+    handleSectionChange(sectionIndex, cleared);
   };
 
-  // Handle date picker change (e.g. 2026-06-15)
-  const handleDateChange = (newDate: string) => {
-    updateAndPersistState((prev) => {
-      const targetMonth = prev.selectedMonth;
-      const parts = newDate.split('-');
-      let dayNum = 1;
+  // Change active date: syncs month if user picks a date with a different month
+  const handleDateChange = (newDateStr: string) => {
+    if (!newDateStr) return;
+
+    let targetMonth = currentMonth;
+    try {
+      const parts = newDateStr.split('-');
       if (parts.length === 3) {
-        dayNum = parseInt(parts[2], 10) || 1;
+        const mIdx = parseInt(parts[1], 10) - 1;
+        if (mIdx >= 0 && mIdx < MONTHS.length) {
+          targetMonth = MONTHS[mIdx];
+        }
       }
-
-      const existingRecord = prev.months[targetMonth].dailyEntries?.[dayNum];
-
-      return {
-        ...prev,
-        months: {
-          ...prev.months,
-          [targetMonth]: {
-            ...prev.months[targetMonth],
-            date: newDate,
-            sections: existingRecord
-              ? JSON.parse(JSON.stringify(existingRecord.sections))
-              : prev.months[targetMonth].sections,
-          },
-        },
-      };
-    });
-  };
-
-  // Handle clicking Day 1..31 from Date Selector
-  const handleSelectDayNumber = (dayNum: number) => {
-    updateAndPersistState((prev) => {
-      const targetMonth = prev.selectedMonth;
-      const currentFullDate = prev.months[targetMonth].date || new Date().toISOString().split('T')[0];
-      const parts = currentFullDate.split('-');
-      const year = parts[0] || new Date().getFullYear().toString();
-      const monthIdx = (MONTHS.indexOf(targetMonth as any) + 1).toString().padStart(2, '0');
-      const formattedDay = dayNum.toString().padStart(2, '0');
-      const constructedDate = `${year}-${monthIdx}-${formattedDay}`;
-
-      const existingRecord = prev.months[targetMonth].dailyEntries?.[dayNum];
-
-      return {
-        ...prev,
-        months: {
-          ...prev.months,
-          [targetMonth]: {
-            ...prev.months[targetMonth],
-            date: constructedDate,
-            sections: existingRecord
-              ? JSON.parse(JSON.stringify(existingRecord.sections))
-              : [createEmptyTimeEntry(0), createEmptyTimeEntry(1), createEmptyTimeEntry(2), createEmptyTimeEntry(3)],
-          },
-        },
-      };
-    });
-  };
-
-  // Handle single section time entry change
-  const handleSectionChange = (index: number, updatedEntry: TimeEntry) => {
-    updateAndPersistState((prev) => {
-      const targetMonth = prev.selectedMonth;
-      const currentSections = [...prev.months[targetMonth].sections] as [
-        TimeEntry,
-        TimeEntry,
-        TimeEntry,
-        TimeEntry
-      ];
-      currentSections[index] = updatedEntry;
-
-      // Auto-update daily entries record if it exists
-      const existingEntries = { ...(prev.months[targetMonth].dailyEntries || {}) };
-      if (existingEntries[currentDayNumber]) {
-        const totals = calculateTotalDuration(currentSections);
-        existingEntries[currentDayNumber] = {
-          ...existingEntries[currentDayNumber],
-          sections: currentSections,
-          durations: totals.durations,
-          totalDuration: totals.totalFormatted,
-          savedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        };
-      }
-
-      return {
-        ...prev,
-        months: {
-          ...prev.months,
-          [targetMonth]: {
-            ...prev.months[targetMonth],
-            sections: currentSections,
-            dailyEntries: existingEntries,
-          },
-        },
-      };
-    });
-  };
-
-  // Clear a single section
-  const handleClearSingleSection = (index: number) => {
-    handleSectionChange(index, createEmptyTimeEntry(index));
-  };
-
-  // Explicit SAVE button action - Saves current calculation date-wise and auto-moves to next date
-  const handleExplicitSave = () => {
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    let savedDay = 1;
-    let nextDay = 1;
-    
-    updateAndPersistState((prev) => {
-      const targetMonth = prev.selectedMonth;
-      const currentSections = prev.months[targetMonth].sections;
-      const totals = calculateTotalDuration(currentSections);
-      savedDay = currentDayNumber;
-      nextDay = savedDay < 31 ? savedDay + 1 : 31;
-      const existingEntries = { ...(prev.months[targetMonth].dailyEntries || {}) };
-
-      const dayRecord: DayRecord = {
-        date: prev.months[targetMonth].date || `${targetMonth} Date ${savedDay}`,
-        dayNumber: savedDay,
-        sections: JSON.parse(JSON.stringify(currentSections)),
-        durations: totals.durations,
-        totalDuration: totals.totalFormatted,
-        otDuration: totals.otFormatted,
-        savedAt: timestamp,
-      };
-
-      existingEntries[savedDay] = dayRecord;
-
-      const currentFullDate = prev.months[targetMonth].date || new Date().toISOString().split('T')[0];
-      const parts = currentFullDate.split('-');
-      const year = parts[0] || new Date().getFullYear().toString();
-      const monthIdx = (MONTHS.indexOf(targetMonth as any) + 1).toString().padStart(2, '0');
-      const formattedDay = nextDay.toString().padStart(2, '0');
-      const constructedDate = `${year}-${monthIdx}-${formattedDay}`;
-
-      const existingNextRecord = existingEntries[nextDay];
-
-      return {
-        ...prev,
-        months: {
-          ...prev.months,
-          [targetMonth]: {
-            ...prev.months[targetMonth],
-            date: constructedDate,
-            sections: existingNextRecord
-              ? JSON.parse(JSON.stringify(existingNextRecord.sections))
-              : [createEmptyTimeEntry(0), createEmptyTimeEntry(1), createEmptyTimeEntry(2), createEmptyTimeEntry(3)],
-            dailyEntries: existingEntries,
-            lastSavedAt: timestamp,
-          },
-        },
-      };
-    });
-
-    setLastSavedNotice(`Date ${savedDay} saved successfully! Moved to Date ${nextDay}.`);
-  };
-
-  // Clear current month
-  const handleClearCurrentMonth = () => {
-    const confirmed = window.confirm(
-      `Are you sure you want to clear all saved data for ${currentMonth}?`
-    );
-    if (!confirmed) return;
+    } catch {
+      // keep currentMonth
+    }
 
     setAppState((prev) => {
-      const updated = clearCurrentMonthData(prev, currentMonth);
-      setLastSavedNotice(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-      return updated;
-    });
-  };
+      const existingTarget = prev.months[targetMonth] || {
+        date: newDateStr,
+        sections: [createEmptyTimeEntry(0), createEmptyTimeEntry(1), createEmptyTimeEntry(2), createEmptyTimeEntry(3)],
+        dailyEntries: {},
+      };
 
-  // Reset all 12 months
-  const handleResetAllData = () => {
-    const confirmed = window.confirm(
-      'This will permanently delete saved time data for all 12 months. Continue?'
-    );
-    if (!confirmed) return;
-
-    const fresh = resetAllStorageData();
-    setAppState(fresh);
-    setLastSavedNotice('');
-  };
-
-  // Export Overall Excel Report across all 12 months
-  const handleExportOverallExcel = () => {
-    exportOverallExcelReport(appState.months);
-  };
-
-  // Export Selected Month Excel Report
-  const handleExportMonthExcel = () => {
-    exportMonthExcelReport(currentMonth, monthData);
-  };
-
-  // Save entry to daily records table (Dates 1 to 31)
-  const handleSaveDayRecord = (dayNumber: number, record: DayRecord) => {
-    updateAndPersistState((prev) => {
-      const targetMonth = prev.selectedMonth;
-      const existingEntries = prev.months[targetMonth].dailyEntries || {};
-
-      return {
+      const nextState = {
         ...prev,
+        selectedMonth: targetMonth,
         months: {
           ...prev.months,
           [targetMonth]: {
-            ...prev.months[targetMonth],
+            ...existingTarget,
+            date: newDateStr,
+          },
+        },
+      };
+
+      saveStorage(nextState);
+      return nextState;
+    });
+  };
+
+  // Change month from Dropdown or Prev/Next
+  const handleSelectMonth = (monthName: string) => {
+    setAppState((prev) => {
+      const existing = prev.months[monthName];
+      let newDate = existing?.date;
+
+      if (!newDate) {
+        const mIndex = MONTHS.indexOf(monthName as any);
+        const y = new Date().getFullYear();
+        const mStr = (mIndex + 1).toString().padStart(2, '0');
+        newDate = `${y}-${mStr}-01`;
+      }
+
+      const nextState = {
+        ...prev,
+        selectedMonth: monthName,
+        months: {
+          ...prev.months,
+          [monthName]: {
+            date: newDate,
+            sections: existing?.sections || [
+              createEmptyTimeEntry(0),
+              createEmptyTimeEntry(1),
+              createEmptyTimeEntry(2),
+              createEmptyTimeEntry(3),
+            ],
+            dailyEntries: existing?.dailyEntries || {},
+            lastSavedAt: existing?.lastSavedAt,
+          },
+        },
+      };
+
+      saveStorage(nextState);
+      return nextState;
+    });
+  };
+
+  // Select day number (1-31) from date strip
+  const handleSelectDayNumber = (dayNum: number) => {
+    const mIdx = MONTHS.indexOf(currentMonth as any);
+    const y = new Date().getFullYear();
+    const mStr = (mIdx + 1).toString().padStart(2, '0');
+    const dStr = dayNum.toString().padStart(2, '0');
+    const newDateStr = `${y}-${mStr}-${dStr}`;
+
+    const existingDayRecord = monthData.dailyEntries?.[dayNum];
+
+    setAppState((prev) => {
+      const currentM = prev.months[currentMonth] || {
+        date: newDateStr,
+        sections: [createEmptyTimeEntry(0), createEmptyTimeEntry(1), createEmptyTimeEntry(2), createEmptyTimeEntry(3)],
+        dailyEntries: {},
+      };
+
+      const sectionsToUse = existingDayRecord
+        ? JSON.parse(JSON.stringify(existingDayRecord.sections))
+        : currentM.sections;
+
+      const nextState = {
+        ...prev,
+        months: {
+          ...prev.months,
+          [currentMonth]: {
+            ...currentM,
+            date: newDateStr,
+            sections: sectionsToUse,
+          },
+        },
+      };
+
+      saveStorage(nextState);
+      return nextState;
+    });
+
+    if (existingDayRecord?.sections[3]?.startTime || existingDayRecord?.sections[3]?.endTime) {
+      setShowSection4(true);
+    }
+  };
+
+  // Explicit Save Handler: saves current day and automatically moves to the next day
+  const handleExplicitSave = () => {
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const calcResult = calculateTotalDuration(monthData.sections);
+
+    const newDayRecord: DayRecord = {
+      date: `${currentMonth} Date ${currentDayNumber}`,
+      dayNumber: currentDayNumber,
+      sections: JSON.parse(JSON.stringify(monthData.sections)),
+      durations: calcResult.durations,
+      totalDuration: calcResult.totalFormatted,
+      otDuration: calcResult.otFormatted,
+      savedAt: timeStr,
+    };
+
+    // Calculate next day number (advances to next day 1-31)
+    const nextDayNumber = currentDayNumber < 31 ? currentDayNumber + 1 : 1;
+    const mIdx = MONTHS.indexOf(currentMonth as any);
+    const y = new Date().getFullYear();
+    const mStr = (mIdx + 1).toString().padStart(2, '0');
+    const nextDStr = nextDayNumber.toString().padStart(2, '0');
+    const nextDateStr = `${y}-${mStr}-${nextDStr}`;
+
+    setAppState((prev) => {
+      const cur = prev.months[currentMonth] || {
+        date: monthData.date,
+        sections: monthData.sections,
+        dailyEntries: {},
+      };
+
+      const updatedDailyEntries = {
+        ...(cur.dailyEntries || {}),
+        [currentDayNumber]: newDayRecord,
+      };
+
+      // Check if next day already has a saved record; if so, load it, otherwise fresh empty entries
+      const existingNextDay = updatedDailyEntries[nextDayNumber];
+      const nextSections: [TimeEntry, TimeEntry, TimeEntry, TimeEntry] = existingNextDay
+        ? JSON.parse(JSON.stringify(existingNextDay.sections))
+        : [
+            createEmptyTimeEntry(0),
+            createEmptyTimeEntry(1),
+            createEmptyTimeEntry(2),
+            createEmptyTimeEntry(3),
+          ];
+
+      const nextState = {
+        ...prev,
+        months: {
+          ...prev.months,
+          [currentMonth]: {
+            ...cur,
+            date: nextDateStr,
+            sections: nextSections,
+            lastSavedAt: timeStr,
+            dailyEntries: updatedDailyEntries,
+          },
+        },
+      };
+
+      saveStorage(nextState);
+      return nextState;
+    });
+
+    // Check if next day's 4th session has data to toggle visibility
+    const existingNextDay = monthData.dailyEntries?.[nextDayNumber];
+    if (existingNextDay?.sections[3]?.startTime || existingNextDay?.sections[3]?.endTime) {
+      setShowSection4(true);
+    } else {
+      setShowSection4(false);
+    }
+
+    setLastSavedNotice(`Day ${currentDayNumber} saved! Moved to Day ${nextDayNumber}`);
+    setTimeout(() => {
+      setLastSavedNotice('');
+    }, 4500);
+  };
+
+  // Export current month report to Excel (.xlsx)
+  const handleExportMonthExcel = async () => {
+    await exportMonthExcelReport(currentMonth, monthData);
+  };
+
+  // Clear current active month data with in-app confirmation modal
+  const handleClearCurrentMonth = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: `Clear ${currentMonth} Data?`,
+      message: `Are you sure you want to clear all 31-day records and current session times for ${currentMonth}? This action cannot be undone.`,
+      confirmLabel: `Clear ${currentMonth}`,
+      isDanger: true,
+      onConfirm: () => {
+        const nextState = clearCurrentMonthData(appState, currentMonth);
+        setAppState(nextState);
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        setLastSavedNotice(`Cleared ${currentMonth}`);
+        setTimeout(() => setLastSavedNotice(''), 3000);
+      },
+    });
+  };
+
+  // Save specific day record from DayRecordsTable
+  const handleSaveDayRecord = (dayNumber: number, record: DayRecord) => {
+    setAppState((prev) => {
+      const curMonth = prev.months[currentMonth];
+      const nextState = {
+        ...prev,
+        months: {
+          ...prev.months,
+          [currentMonth]: {
+            ...curMonth,
             dailyEntries: {
-              ...existingEntries,
+              ...curMonth.dailyEntries,
               [dayNumber]: record,
             },
           },
         },
       };
+      saveStorage(nextState);
+      return nextState;
     });
+    setLastSavedNotice(`Logged Day ${dayNumber}`);
+    setTimeout(() => setLastSavedNotice(''), 3000);
   };
 
-  // Delete single day record from table
+  // Delete day record
   const handleDeleteDayRecord = (dayNumber: number) => {
-    updateAndPersistState((prev) => {
-      const targetMonth = prev.selectedMonth;
-      const existingEntries = { ...(prev.months[targetMonth].dailyEntries || {}) };
-      delete existingEntries[dayNumber];
+    setAppState((prev) => {
+      const curMonth = prev.months[currentMonth];
+      const updatedEntries = { ...curMonth.dailyEntries };
+      delete updatedEntries[dayNumber];
 
-      return {
+      const nextState = {
         ...prev,
         months: {
           ...prev.months,
-          [targetMonth]: {
-            ...prev.months[targetMonth],
-            dailyEntries: existingEntries,
+          [currentMonth]: {
+            ...curMonth,
+            dailyEntries: updatedEntries,
           },
         },
       };
+      saveStorage(nextState);
+      return nextState;
     });
   };
 
-  // Load a saved day record back into the 3 calculation sections
+  // Load a saved day's entries into the main editor cards
   const handleLoadDayRecordToSheet = (record: DayRecord) => {
-    updateAndPersistState((prev) => {
-      const targetMonth = prev.selectedMonth;
+    const mIdx = MONTHS.indexOf(currentMonth as any);
+    const y = new Date().getFullYear();
+    const mStr = (mIdx + 1).toString().padStart(2, '0');
+    const dStr = record.dayNumber.toString().padStart(2, '0');
+    const newDateStr = `${y}-${mStr}-${dStr}`;
+
+    setAppState((prev) => {
+      const cur = prev.months[currentMonth];
       return {
         ...prev,
         months: {
           ...prev.months,
-          [targetMonth]: {
-            ...prev.months[targetMonth],
-            date: record.date || prev.months[targetMonth].date,
+          [currentMonth]: {
+            ...cur,
+            date: newDateStr,
             sections: JSON.parse(JSON.stringify(record.sections)),
           },
         },
       };
     });
+    if (record.sections[3]?.startTime || record.sections[3]?.endTime) {
+      setShowSection4(true);
+    }
   };
 
   // Calculate total duration for current active month sections
   const totalCalculation = calculateTotalDuration(monthData.sections);
 
   return (
-    <div className="min-h-screen bg-white text-black font-sans p-4 sm:p-6 lg:p-10 flex flex-col items-center">
-      <div className="w-full max-w-6xl mx-auto bg-white">
-        {/* 1. HEADER */}
+    <div className="min-h-screen bg-[#F6F7F9] p-2.5 sm:p-4 lg:p-5 flex flex-col w-full">
+      {/* 1. OVERALL APPLICATION CONTAINER: Full width fluid container */}
+      <div className="w-full bg-white border border-neutral-200/80 rounded-2xl p-4 sm:p-5 lg:p-6 shadow-xs flex-1 flex flex-col">
+        {/* 2. TOP HEADER (Branding, Date, Month with Dropdown, and Action Controls: SAVE, EXCEL, CLEAR) */}
         <Header
           date={monthData.date}
           onDateChange={handleDateChange}
           selectedMonth={currentMonth}
-        />
-
-        {/* 2. MONTH SELECTION */}
-        <MonthSelector
-          selectedMonth={currentMonth}
           onSelectMonth={handleSelectMonth}
+          hasSavedData={hasSavedDataForCurrentDay}
+          onSave={handleExplicitSave}
+          onExportMonthExcel={handleExportMonthExcel}
+          onClearCurrentMonth={handleClearCurrentMonth}
+          lastSavedNotice={lastSavedNotice || (monthData.lastSavedAt ? `Saved at ${monthData.lastSavedAt}` : '')}
         />
 
-        {/* 3. DATE SELECTION (DATE 1 TO 31) */}
-        <DateSelector
-          currentDate={monthData.date}
-          selectedMonth={currentMonth}
-          dailyEntries={monthData.dailyEntries || {}}
-          onSelectDayNumber={handleSelectDayNumber}
-        />
+        {/* 3. TWO-COLUMN LAYOUT: Left Calculator + Right Side Monthly Daily Logs (Reduced width: 8 cols vs 4 cols) */}
+        <div className="mt-3.5 grid grid-cols-1 xl:grid-cols-12 gap-5 items-start flex-1">
+          {/* LEFT COLUMN: Date Selector, Compact Sessions, Total Time (Wider: 8 columns) */}
+          <div className="xl:col-span-8 2xl:col-span-8 flex flex-col">
+            {/* DATE SELECTOR (DAYS 1 TO 31) */}
+            <DateSelector
+              currentDate={monthData.date}
+              selectedMonth={currentMonth}
+              dailyEntries={monthData.dailyEntries || {}}
+              onSelectDayNumber={handleSelectDayNumber}
+            />
 
-        {/* 4. FOUR TIME CALCULATION SECTIONS (SECTION 1 TO 4 IN A SINGLE LINE) */}
-        <main className="w-full my-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full">
-            <TimeSection
-              sectionIndex={0}
-              entry={monthData.sections[0]}
-              onChange={(updated) => handleSectionChange(0, updated)}
-              onClearSection={() => handleClearSingleSection(0)}
-            />
-            <TimeSection
-              sectionIndex={1}
-              entry={monthData.sections[1]}
-              onChange={(updated) => handleSectionChange(1, updated)}
-              onClearSection={() => handleClearSingleSection(1)}
-            />
-            <TimeSection
-              sectionIndex={2}
-              entry={monthData.sections[2]}
-              onChange={(updated) => handleSectionChange(2, updated)}
-              onClearSection={() => handleClearSingleSection(2)}
-            />
-            <TimeSection
-              sectionIndex={3}
-              entry={monthData.sections[3]}
-              onChange={(updated) => handleSectionChange(3, updated)}
-              onClearSection={() => handleClearSingleSection(3)}
+            {/* SESSIONS SECTION */}
+            <div className="w-full my-1.5">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-neutral-600">
+                    Daily Work Sessions
+                  </span>
+                  <span className="text-neutral-300">·</span>
+                  {isCurrentSunday ? (
+                    <span className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                      Sunday — Holiday
+                    </span>
+                  ) : (
+                    <span className="text-xs text-neutral-500">
+                      Enter start & end times
+                    </span>
+                  )}
+                </div>
+
+                {/* Optional Section 4 Toggle */}
+                {!showSection4 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowSection4(true)}
+                    className="text-xs font-semibold text-neutral-600 hover:text-neutral-900 inline-flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Session 4 (Overtime / Night)</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleClearSingleSection(3);
+                      setShowSection4(false);
+                    }}
+                    className="text-xs font-medium text-neutral-400 hover:text-neutral-700 inline-flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                    <span>Hide Session 4</span>
+                  </button>
+                )}
+              </div>
+
+              {/* 3 EQUAL COMPACT CARDS IN A ROW (or 4 if expanded) */}
+              <div
+                className={`grid grid-cols-1 sm:grid-cols-2 ${
+                  showSection4 ? 'lg:grid-cols-2 2xl:grid-cols-4' : 'lg:grid-cols-3'
+                } gap-3 w-full`}
+              >
+                {/* CARD 01: Morning / Session 1 */}
+                <TimeSection
+                  sectionIndex={0}
+                  entry={monthData.sections[0]}
+                  onChange={(updated) => handleSectionChange(0, updated)}
+                  onClearSection={() => handleClearSingleSection(0)}
+                  title="Morning"
+                  subtitle="Session 1"
+                />
+
+                {/* CARD 02: Afternoon / Session 2 */}
+                <TimeSection
+                  sectionIndex={1}
+                  entry={monthData.sections[1]}
+                  onChange={(updated) => handleSectionChange(1, updated)}
+                  onClearSection={() => handleClearSingleSection(1)}
+                  title="Afternoon"
+                  subtitle="Session 2"
+                />
+
+                {/* CARD 03: Evening / Session 3 */}
+                <TimeSection
+                  sectionIndex={2}
+                  entry={monthData.sections[2]}
+                  onChange={(updated) => handleSectionChange(2, updated)}
+                  onClearSection={() => handleClearSingleSection(2)}
+                  title="Evening"
+                  subtitle="Session 3"
+                />
+
+                {/* OPTIONAL CARD 04: Overtime / Night */}
+                {showSection4 && (
+                  <TimeSection
+                    sectionIndex={3}
+                    entry={monthData.sections[3]}
+                    onChange={(updated) => handleSectionChange(3, updated)}
+                    onClearSection={() => handleClearSingleSection(3)}
+                    title="Overtime"
+                    subtitle="Night Session"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* TOTAL WORKING TIME SECTION */}
+            <TotalSection
+              totalFormatted={totalCalculation.totalFormatted}
+              otFormatted={totalCalculation.otFormatted}
+              onSave={handleExplicitSave}
             />
           </div>
 
-          {/* 5. TOTAL CALCULATE & BALANCE OT */}
-          <TotalSection
-            totalFormatted={totalCalculation.totalFormatted}
-            otFormatted={totalCalculation.otFormatted}
-          />
+          {/* RIGHT COLUMN: Monthly Daily Logs (Reduced width: 4 columns out of 12) */}
+          <div className="xl:col-span-4 2xl:col-span-4 xl:sticky xl:top-4 w-full">
+            <DayRecordsTable
+              selectedMonth={currentMonth}
+              dailyEntries={monthData.dailyEntries || {}}
+              currentSections={monthData.sections}
+              currentDate={monthData.date}
+              onSaveDayRecord={handleSaveDayRecord}
+              onDeleteDayRecord={handleDeleteDayRecord}
+              onLoadDayRecordToSheet={handleLoadDayRecordToSheet}
+            />
+          </div>
+        </div>
 
-          {/* 6. ACTION CONTROLS (SAVE, EXCEL EXPORT, CLEAR, RESET ALL DATA) */}
-          <ActionControls
-            onSave={handleExplicitSave}
-            onExportMonthExcel={handleExportMonthExcel}
-            onClearCurrentMonth={handleClearCurrentMonth}
-            onResetAllData={handleResetAllData}
-            lastSavedAt={lastSavedNotice || monthData.lastSavedAt}
-            selectedMonth={currentMonth}
-          />
-
-          {/* 7. MONTHLY DAY-BY-DAY RECORDS TABLE (DATES 1 TO 31) */}
-          <DayRecordsTable
-            selectedMonth={currentMonth}
-            dailyEntries={monthData.dailyEntries || {}}
-            currentSections={monthData.sections}
-            currentDate={monthData.date}
-            onSaveDayRecord={handleSaveDayRecord}
-            onDeleteDayRecord={handleDeleteDayRecord}
-            onLoadDayRecordToSheet={handleLoadDayRecordToSheet}
-          />
-        </main>
+        {/* 4. FOOTER: Powered by Karthi Designer with clickable link opening in new tab */}
+        <footer className="w-full mt-4 pt-3.5 pb-1 border-t border-neutral-200/80 flex items-center justify-center text-center text-xs text-neutral-500 font-medium tracking-wide">
+          <span>Time Calculator</span>
+          <span className="mx-2 text-neutral-400 font-bold">*</span>
+          <span>Powered by </span>
+          <a
+            href="https://karthickg.vercel.app/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-1 font-semibold text-neutral-900 hover:text-black underline underline-offset-2 transition-colors cursor-pointer"
+          >
+            Karthi Designer
+          </a>
+        </footer>
       </div>
+
+      {/* IN-APP CONFIRMATION MODAL FOR CLEARING MONTH */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel}
+        isDanger={confirmModal.isDanger}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
-

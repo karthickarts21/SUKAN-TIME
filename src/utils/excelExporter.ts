@@ -1,237 +1,371 @@
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { AllMonthsData, MonthData } from '../types';
 import { calculateTotalDuration, formatTotalMinutes } from './timeCalculator';
+import { getYearFromDate, isSunday } from './dateUtils';
 
-/**
- * Export overall 12-month report into a styled Excel workbook (.xlsx)
- */
-export function exportOverallExcelReport(allMonthsData: AllMonthsData): void {
-  const wb = XLSX.utils.book_new();
-
-  // --- SHEET 1: OVERALL ANNUAL SUMMARY ---
-  const summaryRows: any[] = [
-    ['TIME CALCULATOR - OVERALL ANNUAL REPORT'],
-    ['Generated Date', new Date().toLocaleDateString()],
-    [''],
-    ['Month', 'Total Days Logged', 'Total Duration (HH:MM)', 'Total Minutes'],
-  ];
-
-  let grandTotalMinutesAllYear = 0;
-
-  Object.entries(allMonthsData).forEach(([monthName, monthObj]) => {
-    const dailyEntries = monthObj.dailyEntries || {};
-    const loggedDaysCount = Object.keys(dailyEntries).length;
-
-    let monthTotalMin = 0;
-    Object.values(dailyEntries).forEach((dayRec) => {
-      const totals = calculateTotalDuration(dayRec.sections);
-      monthTotalMin += totals.totalMinutes;
-    });
-
-    grandTotalMinutesAllYear += monthTotalMin;
-
-    summaryRows.push([
-      monthName,
-      loggedDaysCount,
-      formatTotalMinutes(monthTotalMin),
-      monthTotalMin,
-    ]);
+// Helper to trigger browser file download from an ExcelJS buffer
+async function saveWorkbookToDownload(workbook: ExcelJS.Workbook, fileName: string) {
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
-
-  summaryRows.push(['']);
-  summaryRows.push([
-    'GRAND TOTAL (ALL MONTHS)',
-    '',
-    formatTotalMinutes(grandTotalMinutesAllYear),
-    grandTotalMinutesAllYear,
-  ]);
-
-  const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
-  XLSX.utils.book_append_sheet(wb, summarySheet, 'Annual Summary');
-
-  // --- SHEET 2: ALL DAILY LOGS (DATE 1 TO 31 ACROSS ALL MONTHS) ---
-  const detailRows: any[] = [
-    [
-      'Month',
-      'Date #',
-      'Full Date',
-      'Section 1 Start',
-      'Section 1 End',
-      'Sec 1 Duration',
-      'Section 2 Start',
-      'Section 2 End',
-      'Sec 2 Duration',
-      'Section 3 Start',
-      'Section 3 End',
-      'Sec 3 Duration',
-      'Section 4 Start',
-      'Section 4 End',
-      'Sec 4 Duration',
-      'Day Total Duration',
-      'Balance OT',
-      'Saved At',
-    ],
-  ];
-
-  Object.entries(allMonthsData).forEach(([monthName, monthObj]) => {
-    const dailyEntries = monthObj.dailyEntries || {};
-    const sortedDays = Object.values(dailyEntries).sort((a, b) => a.dayNumber - b.dayNumber);
-
-    sortedDays.forEach((dayRec) => {
-      const s1 = dayRec.sections[0] || { startTime: '', startPeriod: 'AM', endTime: '', endPeriod: 'PM' };
-      const s2 = dayRec.sections[1] || { startTime: '', startPeriod: 'PM', endTime: '', endPeriod: 'PM' };
-      const s3 = dayRec.sections[2] || { startTime: '', startPeriod: 'AM', endTime: '', endPeriod: 'PM' };
-      const s4 = dayRec.sections[3] || { startTime: '', startPeriod: 'PM', endTime: '', endPeriod: 'PM' };
-
-      const s1Start = s1.startTime ? `${s1.startTime} ${s1.startPeriod}` : '-';
-      const s1End = s1.endTime ? `${s1.endTime} ${s1.endPeriod}` : '-';
-
-      const s2Start = s2.startTime ? `${s2.startTime} ${s2.startPeriod}` : '-';
-      const s2End = s2.endTime ? `${s2.endTime} ${s2.endPeriod}` : '-';
-
-      const s3Start = s3.startTime ? `${s3.startTime} ${s3.startPeriod}` : '-';
-      const s3End = s3.endTime ? `${s3.endTime} ${s3.endPeriod}` : '-';
-
-      const s4Start = s4.startTime ? `${s4.startTime} ${s4.startPeriod}` : '-';
-      const s4End = s4.endTime ? `${s4.endTime} ${s4.endPeriod}` : '-';
-
-      const totals = calculateTotalDuration(dayRec.sections);
-
-      detailRows.push([
-        monthName,
-        dayRec.dayNumber,
-        dayRec.date,
-        s1Start,
-        s1End,
-        dayRec.durations[0] || '00 H 00 M',
-        s2Start,
-        s2End,
-        dayRec.durations[1] || '00 H 00 M',
-        s3Start,
-        s3End,
-        dayRec.durations[2] || '00 H 00 M',
-        s4Start,
-        s4End,
-        dayRec.durations[3] || '00 H 00 M',
-        dayRec.totalDuration,
-        dayRec.otDuration || totals.otFormatted,
-        dayRec.savedAt || '-',
-      ]);
-    });
-  });
-
-  const detailSheet = XLSX.utils.aoa_to_sheet(detailRows);
-  XLSX.utils.book_append_sheet(wb, detailSheet, 'All Daily Entries');
-
-  // Save workbook file
-  const fileName = `Time_Calculator_Overall_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
-  XLSX.writeFile(wb, fileName);
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  window.URL.revokeObjectURL(url);
 }
 
+// Border styles
+const thinBorder: Partial<ExcelJS.Borders> = {
+  top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+  left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+  bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+  right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+};
+
+const headerBorder: Partial<ExcelJS.Borders> = {
+  top: { style: 'medium', color: { argb: 'FF0F172A' } },
+  left: { style: 'thin', color: { argb: 'FF334155' } },
+  bottom: { style: 'medium', color: { argb: 'FF0F172A' } },
+  right: { style: 'thin', color: { argb: 'FF334155' } },
+};
+
 /**
- * Export current month report to Excel (.xlsx)
+ * Export current month report to a beautifully designed & colored Excel workbook (.xlsx)
  */
-export function exportMonthExcelReport(monthName: string, monthObj: MonthData): void {
-  const wb = XLSX.utils.book_new();
+export async function exportMonthExcelReport(monthName: string, monthObj: MonthData): Promise<void> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Time Calculator App';
+  workbook.created = new Date();
+
+  const worksheet = workbook.addWorksheet(`${monthName} Report`, {
+    views: [{ showGridLines: true }],
+  });
 
   const dailyEntries = monthObj.dailyEntries || {};
   const sortedDays = Object.values(dailyEntries).sort((a, b) => a.dayNumber - b.dayNumber);
-
-  const monthRows: any[] = [
-    [`TIME CALCULATOR - ${monthName} REPORT`],
-    ['Month', monthName],
-    ['Report Date', new Date().toLocaleDateString()],
-    [''],
-    [
-      'Date #',
-      'Full Date',
-      'Section 1 Start',
-      'Section 1 End',
-      'Sec 1 Duration',
-      'Section 2 Start',
-      'Section 2 End',
-      'Sec 2 Duration',
-      'Section 3 Start',
-      'Section 3 End',
-      'Sec 3 Duration',
-      'Section 4 Start',
-      'Section 4 End',
-      'Sec 4 Duration',
-      'Day Total Duration',
-      'Balance OT',
-      'Saved At',
-    ],
-  ];
 
   let totalMonthMinutes = 0;
   let totalMonthOtMinutes = 0;
 
   sortedDays.forEach((dayRec) => {
+    const totals = calculateTotalDuration(dayRec.sections);
+    totalMonthMinutes += totals.totalMinutes;
+    totalMonthOtMinutes += totals.otMinutes;
+  });
+
+  // 1. Title Banner (Rows 1 & 2)
+  worksheet.mergeCells('A1:Q1');
+  const titleCell = worksheet.getCell('A1');
+  titleCell.value = `⏱ TIME CALCULATOR — MONTHLY REPORT (${monthName.toUpperCase()})`;
+  titleCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+  titleCell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF0F172A' }, // Deep Slate Navy
+  };
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  worksheet.getRow(1).height = 40;
+
+  // Subtitle / Info bar (Row 2)
+  worksheet.mergeCells('A2:Q2');
+  const subtitleCell = worksheet.getCell('A2');
+  subtitleCell.value = `Month: ${monthName}   |   Logged Days: ${sortedDays.length}/31   |   Total Hours: ${formatTotalMinutes(totalMonthMinutes)}   |   Balance OT: ${formatTotalMinutes(totalMonthOtMinutes)}   |   Exported: ${new Date().toLocaleDateString()}`;
+  subtitleCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF065F46' } };
+  subtitleCell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFD1FAE5' }, // Soft Emerald Mint
+  };
+  subtitleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  worksheet.getRow(2).height = 24;
+
+  // Blank spacing row 3
+  worksheet.getRow(3).height = 10;
+
+  // 2. Table Column Headers (Row 4)
+  const headers = [
+    'Day',
+    'Date',
+    'Sec 1 In',
+    'Sec 1 Out',
+    'Sec 1 Dur',
+    'Sec 2 In',
+    'Sec 2 Out',
+    'Sec 2 Dur',
+    'Sec 3 In',
+    'Sec 3 Out',
+    'Sec 3 Dur',
+    'Sec 4 In',
+    'Sec 4 Out',
+    'Sec 4 Dur',
+    'Day Total',
+    'Balance OT',
+    'Saved At',
+  ];
+
+  const headerRow = worksheet.getRow(4);
+  headerRow.height = 28;
+  headers.forEach((h, idx) => {
+    const colNumber = idx + 1;
+    const cell = headerRow.getCell(colNumber);
+    cell.value = h;
+    cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.border = headerBorder;
+
+    // Special header colors for key metrics
+    if (h === 'Day Total') {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } }; // Dark Slate
+    } else if (h === 'Balance OT') {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF047857' } }; // Deep Emerald
+    } else {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }; // Slate Gray
+    }
+  });
+
+  // 3. Data Rows (Row 5 onwards)
+  let currentRowIndex = 5;
+
+  sortedDays.forEach((dayRec, idx) => {
     const s1 = dayRec.sections[0] || { startTime: '', startPeriod: 'AM', endTime: '', endPeriod: 'PM' };
     const s2 = dayRec.sections[1] || { startTime: '', startPeriod: 'PM', endTime: '', endPeriod: 'PM' };
     const s3 = dayRec.sections[2] || { startTime: '', startPeriod: 'AM', endTime: '', endPeriod: 'PM' };
     const s4 = dayRec.sections[3] || { startTime: '', startPeriod: 'PM', endTime: '', endPeriod: 'PM' };
 
-    const s1Start = s1.startTime ? `${s1.startTime} ${s1.startPeriod}` : '-';
-    const s1End = s1.endTime ? `${s1.endTime} ${s1.endPeriod}` : '-';
+    const s1In = s1.startTime ? `${s1.startTime} ${s1.startPeriod}` : '-';
+    const s1Out = s1.endTime ? `${s1.endTime} ${s1.endPeriod}` : '-';
 
-    const s2Start = s2.startTime ? `${s2.startTime} ${s2.startPeriod}` : '-';
-    const s2End = s2.endTime ? `${s2.endTime} ${s2.endPeriod}` : '-';
+    const s2In = s2.startTime ? `${s2.startTime} ${s2.startPeriod}` : '-';
+    const s2Out = s2.endTime ? `${s2.endTime} ${s2.endPeriod}` : '-';
 
-    const s3Start = s3.startTime ? `${s3.startTime} ${s3.startPeriod}` : '-';
-    const s3End = s3.endTime ? `${s3.endTime} ${s3.endPeriod}` : '-';
+    const s3In = s3.startTime ? `${s3.startTime} ${s3.startPeriod}` : '-';
+    const s3Out = s3.endTime ? `${s3.endTime} ${s3.endPeriod}` : '-';
 
-    const s4Start = s4.startTime ? `${s4.startTime} ${s4.startPeriod}` : '-';
-    const s4End = s4.endTime ? `${s4.endTime} ${s4.endPeriod}` : '-';
+    const s4In = s4.startTime ? `${s4.startTime} ${s4.startPeriod}` : '-';
+    const s4Out = s4.endTime ? `${s4.endTime} ${s4.endPeriod}` : '-';
 
     const totals = calculateTotalDuration(dayRec.sections);
-    totalMonthMinutes += totals.totalMinutes;
-    totalMonthOtMinutes += totals.otMinutes;
+    const isEven = idx % 2 === 0;
+    const isSun = isSunday(dayRec.dayNumber, monthName, getYearFromDate(monthObj.date));
 
-    monthRows.push([
+    const row = worksheet.getRow(currentRowIndex);
+    row.height = 22;
+
+    const dateFormatted = isSun ? `${dayRec.date} (Sunday - Holiday)` : dayRec.date;
+
+    const rowData = [
       dayRec.dayNumber,
-      dayRec.date,
-      s1Start,
-      s1End,
+      dateFormatted,
+      s1In,
+      s1Out,
       dayRec.durations[0] || '00 H 00 M',
-      s2Start,
-      s2End,
+      s2In,
+      s2Out,
       dayRec.durations[1] || '00 H 00 M',
-      s3Start,
-      s3End,
+      s3In,
+      s3Out,
       dayRec.durations[2] || '00 H 00 M',
-      s4Start,
-      s4End,
+      s4In,
+      s4Out,
       dayRec.durations[3] || '00 H 00 M',
       dayRec.totalDuration,
       dayRec.otDuration || totals.otFormatted,
       dayRec.savedAt || '-',
-    ]);
+    ];
+
+    rowData.forEach((val, colIdx) => {
+      const colNum = colIdx + 1;
+      const cell = row.getCell(colNum);
+      cell.value = val;
+      cell.font = { name: 'Arial', size: 9.5 };
+      cell.border = thinBorder;
+      cell.alignment = { vertical: 'middle', horizontal: colIdx === 1 ? 'left' : 'center' };
+
+      // Base background: Soft rose tint for Sunday Holiday, otherwise Zebra striping
+      const defaultBg = isSun ? 'FFFFF1F2' : isEven ? 'FFFFFFFF' : 'FFF8FAFC';
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: defaultBg } };
+
+      // Highlight Day Number
+      if (colIdx === 0) {
+        cell.font = {
+          name: 'Arial',
+          size: 9.5,
+          bold: true,
+          color: { argb: isSun ? 'FFE11D48' : 'FF0F172A' },
+        };
+      }
+
+      // If Sunday Holiday, format date text slightly in rose
+      if (colIdx === 1 && isSun) {
+        cell.font = { name: 'Arial', size: 9.5, bold: true, color: { argb: 'FFBE123C' } };
+      }
+
+      // Highlight Total Duration (Col 15)
+      if (colIdx === 14) {
+        cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+      }
+
+      // Highlight Balance OT (Col 16)
+      if (colIdx === 15) {
+        cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF166534' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } }; // Light Green Badge
+      }
+    });
+
+    currentRowIndex++;
   });
 
-  monthRows.push(['']);
-  monthRows.push([
-    'TOTAL MONTH DURATION',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    formatTotalMinutes(totalMonthMinutes),
-    formatTotalMinutes(totalMonthOtMinutes),
-  ]);
+  // Spacing row
+  worksheet.getRow(currentRowIndex).height = 8;
+  currentRowIndex++;
 
-  const monthSheet = XLSX.utils.aoa_to_sheet(monthRows);
-  XLSX.utils.book_append_sheet(wb, monthSheet, `${monthName} Log`);
+  // 4. Grand Total Summary Row
+  const summaryRow = worksheet.getRow(currentRowIndex);
+  summaryRow.height = 30;
+
+  worksheet.mergeCells(`A${currentRowIndex}:N${currentRowIndex}`);
+  const summaryLabel = worksheet.getCell(`A${currentRowIndex}`);
+  summaryLabel.value = `GRAND TOTAL FOR ${monthName.toUpperCase()}:`;
+  summaryLabel.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+  summaryLabel.alignment = { vertical: 'middle', horizontal: 'right' };
+  summaryLabel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+
+  const totalMinCell = summaryRow.getCell(15);
+  totalMinCell.value = formatTotalMinutes(totalMonthMinutes);
+  totalMinCell.font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+  totalMinCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  totalMinCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+  totalMinCell.border = headerBorder;
+
+  const totalOtCell = summaryRow.getCell(16);
+  totalOtCell.value = formatTotalMinutes(totalMonthOtMinutes);
+  totalOtCell.font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+  totalOtCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  totalOtCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF047857' } };
+  totalOtCell.border = headerBorder;
+
+  const endCell = summaryRow.getCell(17);
+  endCell.value = '';
+  endCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+
+  // Set explicit clean column widths
+  const columnWidths = [7, 16, 11, 11, 13, 11, 11, 13, 11, 11, 13, 11, 11, 13, 15, 15, 12];
+  columnWidths.forEach((w, i) => {
+    worksheet.getColumn(i + 1).width = w;
+  });
 
   const fileName = `Time_Calculator_${monthName}_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
-  XLSX.writeFile(wb, fileName);
+  await saveWorkbookToDownload(workbook, fileName);
+}
+
+/**
+ * Export overall 12-month report into a styled Excel workbook (.xlsx)
+ */
+export async function exportOverallExcelReport(allMonthsData: AllMonthsData): Promise<void> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Time Calculator App';
+  workbook.created = new Date();
+
+  // --- SHEET 1: OVERALL ANNUAL SUMMARY ---
+  const summarySheet = workbook.addWorksheet('Annual Summary', {
+    views: [{ showGridLines: true }],
+  });
+
+  summarySheet.mergeCells('A1:E1');
+  const title = summarySheet.getCell('A1');
+  title.value = '⏱ TIME CALCULATOR — ANNUAL SUMMARY (ALL 12 MONTHS)';
+  title.font = { name: 'Arial', size: 15, bold: true, color: { argb: 'FFFFFFFF' } };
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+  title.alignment = { vertical: 'middle', horizontal: 'center' };
+  summarySheet.getRow(1).height = 36;
+
+  const summaryHeaders = ['Month', 'Days Logged', 'Total Duration (HH:MM)', 'Balance OT', 'Total Minutes'];
+  const sHeadRow = summarySheet.getRow(3);
+  sHeadRow.height = 26;
+  summaryHeaders.forEach((h, idx) => {
+    const cell = sHeadRow.getCell(idx + 1);
+    cell.value = h;
+    cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+    cell.border = headerBorder;
+  });
+
+  let grandTotalMinutesAllYear = 0;
+  let grandTotalOtAllYear = 0;
+  let sRowIdx = 4;
+
+  Object.entries(allMonthsData).forEach(([monthName, monthObj], idx) => {
+    const dailyEntries = monthObj.dailyEntries || {};
+    const loggedDaysCount = Object.keys(dailyEntries).length;
+
+    let monthTotalMin = 0;
+    let monthOtMin = 0;
+    Object.values(dailyEntries).forEach((dayRec) => {
+      const totals = calculateTotalDuration(dayRec.sections);
+      monthTotalMin += totals.totalMinutes;
+      monthOtMin += totals.otMinutes;
+    });
+
+    grandTotalMinutesAllYear += monthTotalMin;
+    grandTotalOtAllYear += monthOtMin;
+
+    const row = summarySheet.getRow(sRowIdx);
+    row.height = 22;
+    const isEven = idx % 2 === 0;
+    const bg = isEven ? 'FFFFFFFF' : 'FFF8FAFC';
+
+    [
+      monthName,
+      loggedDaysCount,
+      formatTotalMinutes(monthTotalMin),
+      formatTotalMinutes(monthOtMin),
+      monthTotalMin,
+    ].forEach((val, colIdx) => {
+      const cell = row.getCell(colIdx + 1);
+      cell.value = val;
+      cell.border = thinBorder;
+      cell.alignment = { vertical: 'middle', horizontal: colIdx === 0 ? 'left' : 'center' };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+
+      if (colIdx === 0) cell.font = { bold: true };
+      if (colIdx === 2) cell.font = { bold: true, color: { argb: 'FF0F172A' } };
+      if (colIdx === 3) {
+        cell.font = { bold: true, color: { argb: 'FF166534' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
+      }
+    });
+
+    sRowIdx++;
+  });
+
+  // Grand Total Row
+  const gRow = summarySheet.getRow(sRowIdx + 1);
+  gRow.height = 28;
+  gRow.getCell(1).value = 'ANNUAL GRAND TOTAL';
+  gRow.getCell(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  gRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+
+  gRow.getCell(3).value = formatTotalMinutes(grandTotalMinutesAllYear);
+  gRow.getCell(3).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  gRow.getCell(3).alignment = { vertical: 'middle', horizontal: 'center' };
+  gRow.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+
+  gRow.getCell(4).value = formatTotalMinutes(grandTotalOtAllYear);
+  gRow.getCell(4).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  gRow.getCell(4).alignment = { vertical: 'middle', horizontal: 'center' };
+  gRow.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF047857' } };
+
+  [18, 16, 26, 20, 16].forEach((w, i) => {
+    summarySheet.getColumn(i + 1).width = w;
+  });
+
+  const fileName = `Time_Calculator_Overall_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+  await saveWorkbookToDownload(workbook, fileName);
 }
