@@ -35,27 +35,9 @@ export const DateSelector: React.FC<DateSelectorProps> = ({
   return (
     <div className="w-full my-2 p-2.5 sm:p-3 bg-white border border-neutral-200/80 rounded-xl shadow-xs">
       <div className="flex items-center justify-between mb-2 px-1">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-neutral-600">
-            Day Selector (1–31)
-          </span>
-          <span className="text-neutral-300">·</span>
-          <span className="text-xs text-neutral-500">
-            {savedCount} {savedCount === 1 ? 'day logged' : 'days logged'} in {selectedMonth}
-          </span>
-        </div>
-
-        {/* ACTIVE DAY STATUS (Highlights Sunday Holiday if active day is Sunday) */}
-        {isCurrentSunday ? (
-          <span className="text-xs font-mono font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-            Active: Day {currentDayNum} (Sunday — Holiday)
-          </span>
-        ) : (
-          <span className="text-xs font-mono font-semibold text-neutral-800 bg-neutral-100 px-2 py-0.5 rounded-md">
-            Active: Day {currentDayNum}
-          </span>
-        )}
+        <span className="text-xs font-bold uppercase tracking-wider text-neutral-600">
+          Day Selector
+        </span>
       </div>
 
       <div className="grid grid-cols-7 sm:grid-cols-11 md:grid-cols-16 lg:grid-cols-31 gap-1">

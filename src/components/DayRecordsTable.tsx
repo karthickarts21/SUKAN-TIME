@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { DayRecord, TimeEntry } from '../types';
 import { calculateTotalDuration, formatTotalMinutes } from '../utils/timeCalculator';
-import { getYearFromDate, isSunday } from '../utils/dateUtils';
+import { getDaysInMonth, getYearFromDate, isSunday } from '../utils/dateUtils';
+import { createEmptyTimeEntry, MONTHS } from '../utils/storage';
 import {
   FileSpreadsheet,
   FileText,
-  Filter,
   List,
   Trash2,
   Upload,
@@ -29,55 +29,75 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
   onLoadDayRecordToSheet,
 }) => {
   const currentYear = getYearFromDate(currentDate);
+  const daysInMonth = getDaysInMonth(selectedMonth, currentYear);
+  const mIdx = MONTHS.indexOf(selectedMonth as any);
+  const mStr = (mIdx >= 0 ? mIdx + 1 : 1).toString().padStart(2, '0');
 
   // Default to spreadsheet table view as requested
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
 
-  // Day filter state: 'all', 'with_ot', 'sundays', or specific day number '1'..'31'
-  const [filterDay, setFilterDay] = useState<string>('all');
+  // Build the list of records:
+  // All user-logged days + ALL Sundays in the month even if not logged!
+  const allRecordsMap: Record<number, DayRecord> = { ...dailyEntries };
 
-  const loggedDaysList: DayRecord[] = (Object.values(dailyEntries) as DayRecord[]).sort(
+  for (let d = 1; d <= daysInMonth; d++) {
+    if (isSunday(d, selectedMonth, currentYear) && !allRecordsMap[d]) {
+      const dStr = d.toString().padStart(2, '0');
+      allRecordsMap[d] = {
+        dayNumber: d,
+        date: `${currentYear}-${mStr}-${dStr}`,
+        sections: [
+          createEmptyTimeEntry(0),
+          createEmptyTimeEntry(1),
+          createEmptyTimeEntry(2),
+          createEmptyTimeEntry(3),
+        ],
+        durations: ['-', '-', '-', '-'],
+        totalDuration: '-',
+        otDuration: '-',
+        savedAt: '',
+        isHoliday: true,
+      };
+    }
+  }
+
+  const displayedDaysList: DayRecord[] = (Object.values(allRecordsMap) as DayRecord[]).sort(
     (a, b) => a.dayNumber - b.dayNumber
   );
 
-  const grandTotalMinutes = loggedDaysList.reduce((acc: number, entry: DayRecord) => {
-    const totals = calculateTotalDuration(entry.sections);
-    return acc + totals.totalMinutes;
-  }, 0);
+  const loggedCount = Object.keys(dailyEntries).length;
 
-  const grandTotalOtMinutes = loggedDaysList.reduce((acc: number, entry: DayRecord) => {
-    const totals = calculateTotalDuration(entry.sections);
-    return acc + totals.otMinutes;
-  }, 0);
-
-  // Filtered list according to active Day Filter
-  const displayedDaysList: DayRecord[] = loggedDaysList.filter((entry) => {
-    if (filterDay === 'all') return true;
-    if (filterDay === 'with_ot') {
+  const grandTotalMinutes = (Object.values(dailyEntries) as DayRecord[]).reduce(
+    (acc: number, entry: DayRecord) => {
       const totals = calculateTotalDuration(entry.sections);
-      return totals.otMinutes > 0;
-    }
-    if (filterDay === 'sundays') {
-      return isSunday(entry.dayNumber, selectedMonth, currentYear);
-    }
-    return entry.dayNumber === parseInt(filterDay, 10);
-  });
+      return acc + totals.totalMinutes;
+    },
+    0
+  );
+
+  const grandTotalOtMinutes = (Object.values(dailyEntries) as DayRecord[]).reduce(
+    (acc: number, entry: DayRecord) => {
+      const totals = calculateTotalDuration(entry.sections);
+      return acc + totals.otMinutes;
+    },
+    0
+  );
 
   return (
-    <aside className="w-full bg-white border border-neutral-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col h-full">
+    <aside className="w-full bg-white border border-neutral-200/90 rounded-2xl p-3 sm:p-4 shadow-xs flex flex-col h-full min-h-0 overflow-hidden">
       {/* HEADER */}
-      <div className="pb-3 border-b border-neutral-100 flex flex-col gap-2.5">
+      <div className="pb-2.5 border-b border-neutral-100 flex flex-col gap-2 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-neutral-900 text-white flex items-center justify-center shrink-0">
               <FileText className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-neutral-900 leading-none">
+              <h2 className="text-sm sm:text-base font-bold text-neutral-900 leading-none">
                 Monthly Daily Logs
               </h2>
-              <span className="text-xs text-neutral-500 font-medium">
-                {selectedMonth} · {loggedDaysList.length}/31 days logged
+              <span className="text-[11px] text-neutral-500 font-medium">
+                {selectedMonth} · {loggedCount}/{daysInMonth} days logged
               </span>
             </div>
           </div>
@@ -87,7 +107,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
             <button
               type="button"
               onClick={() => setViewMode('cards')}
-              className={`p-1.5 rounded-md text-xs transition-colors ${
+              className={`p-1.5 rounded-md text-xs transition-colors cursor-pointer ${
                 viewMode === 'cards'
                   ? 'bg-white text-neutral-900 shadow-xs font-semibold'
                   : 'text-neutral-500 hover:text-neutral-900'
@@ -99,7 +119,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
             <button
               type="button"
               onClick={() => setViewMode('table')}
-              className={`p-1.5 rounded-md text-xs transition-colors ${
+              className={`p-1.5 rounded-md text-xs transition-colors cursor-pointer ${
                 viewMode === 'table'
                   ? 'bg-white text-neutral-900 shadow-xs font-semibold'
                   : 'text-neutral-500 hover:text-neutral-900'
@@ -111,8 +131,8 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
           </div>
         </div>
 
-        {/* SUMMARY STATS BADGES + DAY FILTER (Day Filter positioned right next to Total Balance OT) */}
-        <div className="grid grid-cols-3 gap-2">
+        {/* SUMMARY STATS BADGES (Grand Total & Total OT) */}
+        <div className="grid grid-cols-2 gap-2">
           {/* 1. Grand Total */}
           <div className="bg-neutral-50 border border-neutral-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-center">
             <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-neutral-500 leading-tight">
@@ -123,91 +143,37 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
             </span>
           </div>
 
-          {/* 2. Total Balance OT */}
+          {/* 2. Total OT */}
           <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-center">
             <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-800 leading-tight">
-              Total Balance OT
+              Total OT
             </span>
             <span className="font-mono font-bold text-xs sm:text-sm md:text-base text-emerald-900 tabular-nums mt-0.5">
               {formatTotalMinutes(grandTotalOtMinutes)}
             </span>
           </div>
-
-          {/* 3. Day Filter (Right side of Total Balance OT) */}
-          <div className="bg-neutral-50 border border-neutral-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-neutral-600 flex items-center gap-1 leading-tight">
-                <Filter className="w-2.5 h-2.5 text-neutral-500" />
-                Day Filter
-              </span>
-              {filterDay !== 'all' && (
-                <button
-                  type="button"
-                  onClick={() => setFilterDay('all')}
-                  className="text-[9px] text-neutral-500 hover:text-neutral-900 underline cursor-pointer"
-                  title="Show all days"
-                >
-                  All
-                </button>
-              )}
-            </div>
-            <select
-              value={filterDay}
-              onChange={(e) => setFilterDay(e.target.value)}
-              className="mt-0.5 bg-white border border-neutral-200 hover:border-neutral-300 focus:border-neutral-900 rounded-md px-1 py-0.5 text-xs font-mono font-bold text-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900 cursor-pointer w-full shadow-2xs"
-              aria-label="Filter logs by day"
-            >
-              <option value="all">All ({loggedDaysList.length})</option>
-              <option value="with_ot">With OT</option>
-              <option value="sundays">Sundays (Holiday)</option>
-              <option disabled>──────</option>
-              {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => {
-                const isSun = isSunday(d, selectedMonth, currentYear);
-                return (
-                  <option key={d} value={d.toString()}>
-                    Day {d} {isSun ? '(Sun - Holiday)' : ''} {dailyEntries[d] ? '✓' : ''}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
         </div>
       </div>
 
-      {/* LOGS CONTENT AREA (Scrollable) */}
-      <div className="flex-1 mt-2.5 overflow-y-auto max-h-[580px] pr-0.5">
-        {loggedDaysList.length === 0 ? (
-          <div className="text-center py-12 px-4 bg-neutral-50/60 rounded-xl border border-dashed border-neutral-200 my-auto">
+      {/* LOGS CONTENT AREA - SCROLLABLE INSIDE THIS CONTAINER ONLY */}
+      <div className="flex-1 mt-2 overflow-y-auto min-h-0 pr-1">
+        {displayedDaysList.length === 0 ? (
+          <div className="text-center py-10 px-4 bg-neutral-50/60 rounded-xl border border-dashed border-neutral-200 my-auto">
             <p className="text-xs font-semibold text-neutral-700">
               No entries logged for {selectedMonth} yet
             </p>
             <p className="text-[11px] text-neutral-400 mt-1 max-w-[240px] mx-auto">
-              Enter your session times and click <strong>SAVE</strong> to log your work hours.
+              Enter session times and click <strong>SAVE DAY</strong>.
             </p>
-          </div>
-        ) : displayedDaysList.length === 0 ? (
-          <div className="text-center py-8 px-4 bg-neutral-50/60 rounded-xl border border-dashed border-neutral-200">
-            <p className="text-xs font-semibold text-neutral-700">
-              {filterDay === 'with_ot'
-                ? 'No overtime records in this month yet'
-                : filterDay === 'sundays'
-                ? 'No logged Sunday records in this month yet'
-                : `Day ${filterDay} has not been logged yet`}
-            </p>
-            <button
-              type="button"
-              onClick={() => setFilterDay('all')}
-              className="mt-2 text-xs font-semibold text-neutral-900 underline cursor-pointer"
-            >
-              Show all logged days ({loggedDaysList.length})
-            </button>
           </div>
         ) : viewMode === 'cards' ? (
-          /* COMPACT LIST VIEW - PERFECT FOR SIDEBAR */
+          /* COMPACT LIST VIEW */
           <div className="space-y-2">
             {displayedDaysList.map((entry) => {
-              const entryCalc = calculateTotalDuration(entry.sections);
               const isSun = isSunday(entry.dayNumber, selectedMonth, currentYear);
+              const isSaved = !!dailyEntries[entry.dayNumber];
+              const entryCalc = isSaved ? calculateTotalDuration(entry.sections) : null;
+
               return (
                 <div
                   key={entry.dayNumber}
@@ -248,14 +214,16 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                         <Upload className="w-2.5 h-2.5" />
                         <span>Load</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => onDeleteDayRecord(entry.dayNumber)}
-                        className="p-1 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                        title="Delete day record"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
+                      {isSaved && (
+                        <button
+                          type="button"
+                          onClick={() => onDeleteDayRecord(entry.dayNumber)}
+                          className="p-1 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                          title="Delete day record"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -264,31 +232,33 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                     <div className="flex items-center gap-1">
                       <span className="text-[10px] font-medium text-neutral-500">Total:</span>
                       <span className="font-mono font-bold text-neutral-900 tabular-nums text-[11px]">
-                        {entry.totalDuration}
+                        {isSaved ? entry.totalDuration : '-'}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
                       <span className="text-[10px] font-medium text-neutral-500">OT:</span>
                       <span className="font-mono font-bold text-emerald-800 tabular-nums text-[11px]">
-                        {entry.otDuration || entryCalc.otFormatted}
+                        {isSaved ? (entry.otDuration || entryCalc?.otFormatted) : '-'}
                       </span>
                     </div>
                   </div>
 
                   {/* SESSIONS BREAKDOWN PILLS */}
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {entry.sections.map((s, idx) => {
-                      if (!s.startTime && !s.endTime) return null;
-                      return (
-                        <span
-                          key={idx}
-                          className="px-1.5 py-0.5 bg-white border border-neutral-200/90 rounded text-[9px] font-mono text-neutral-600"
-                        >
-                          S{idx + 1}: {s.startTime}{s.startPeriod}-{s.endTime}{s.endPeriod} ({entry.durations[idx]})
-                        </span>
-                      );
-                    })}
-                  </div>
+                  {isSaved && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {entry.sections.map((s, idx) => {
+                        if (!s.startTime && !s.endTime) return null;
+                        return (
+                          <span
+                            key={idx}
+                            className="px-1.5 py-0.5 bg-white border border-neutral-200/90 rounded text-[9px] font-mono text-neutral-600"
+                          >
+                            S{idx + 1}: {s.startTime}{s.startPeriod}-{s.endTime}{s.endPeriod} ({entry.durations[idx]})
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -308,14 +278,16 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
               </thead>
               <tbody className="divide-y divide-neutral-100">
                 {displayedDaysList.map((entry) => {
-                  const entryCalc = calculateTotalDuration(entry.sections);
                   const isSun = isSunday(entry.dayNumber, selectedMonth, currentYear);
+                  const isSaved = !!dailyEntries[entry.dayNumber];
+                  const entryCalc = isSaved ? calculateTotalDuration(entry.sections) : null;
+
                   return (
                     <tr
                       key={entry.dayNumber}
                       className={`transition-colors ${
                         isSun
-                          ? 'bg-rose-50/25 hover:bg-rose-50/50'
+                          ? 'bg-rose-50/30 hover:bg-rose-50/55'
                           : 'hover:bg-neutral-50/70'
                       }`}
                     >
@@ -339,10 +311,10 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                         </div>
                       </td>
                       <td className="px-1.5 sm:px-2 py-1.5 text-center font-mono font-bold text-neutral-900 tabular-nums text-[11px]">
-                        {entry.totalDuration}
+                        {isSaved ? entry.totalDuration : '-'}
                       </td>
                       <td className="px-1.5 sm:px-2 py-1.5 text-center font-mono font-bold text-emerald-800 tabular-nums text-[11px]">
-                        {entry.otDuration || entryCalc.otFormatted}
+                        {isSaved ? (entry.otDuration || entryCalc?.otFormatted) : '-'}
                       </td>
                       <td className="px-1.5 sm:px-2 py-1.5 text-center whitespace-nowrap">
                         <div className="inline-flex items-center gap-0.5 sm:gap-1">
@@ -354,14 +326,16 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                           >
                             <Upload className="w-3 h-3" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => onDeleteDayRecord(entry.dayNumber)}
-                            className="p-1 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
-                            title="Delete record"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
+                          {isSaved && (
+                            <button
+                              type="button"
+                              onClick={() => onDeleteDayRecord(entry.dayNumber)}
+                              className="p-1 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
+                              title="Delete record"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -374,7 +348,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
       </div>
 
       {/* FOOTER ACCUMULATION */}
-      <div className="mt-2.5 pt-2.5 border-t border-neutral-100 flex items-center justify-between text-xs">
+      <div className="mt-2 pt-2 border-t border-neutral-100 flex items-center justify-between text-xs shrink-0">
         <span className="text-[10px] sm:text-[11px] font-semibold text-neutral-500 uppercase tracking-wide">
           {selectedMonth} Grand Total:
         </span>

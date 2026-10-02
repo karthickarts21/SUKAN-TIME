@@ -15,6 +15,7 @@ export interface DayRecord {
   totalDuration: string;
   otDuration?: string;
   savedAt: string;
+  isHoliday?: boolean;
 }
 
 export interface MonthData {

@@ -1,7 +1,8 @@
 import ExcelJS from 'exceljs';
-import { AllMonthsData, MonthData } from '../types';
+import { AllMonthsData, DayRecord, MonthData } from '../types';
 import { calculateTotalDuration, formatTotalMinutes } from './timeCalculator';
-import { getYearFromDate, isSunday } from './dateUtils';
+import { getDaysInMonth, getYearFromDate, isSunday } from './dateUtils';
+import { createEmptyTimeEntry, MONTHS } from './storage';
 
 // Helper to trigger browser file download from an ExcelJS buffer
 async function saveWorkbookToDownload(workbook: ExcelJS.Workbook, fileName: string) {
@@ -46,13 +47,43 @@ export async function exportMonthExcelReport(monthName: string, monthObj: MonthD
     views: [{ showGridLines: true }],
   });
 
-  const dailyEntries = monthObj.dailyEntries || {};
-  const sortedDays = Object.values(dailyEntries).sort((a, b) => a.dayNumber - b.dayNumber);
+  const year = getYearFromDate(monthObj.date);
+  const daysInMonth = getDaysInMonth(monthName, year);
+  const mIdx = MONTHS.indexOf(monthName as any);
+  const mStr = (mIdx >= 0 ? mIdx + 1 : 1).toString().padStart(2, '0');
+
+  // Include all logged days + all Sundays even if unlogged
+  const allRecordsMap: Record<number, DayRecord> = { ...(monthObj.dailyEntries || {}) };
+  for (let d = 1; d <= daysInMonth; d++) {
+    if (isSunday(d, monthName, year) && !allRecordsMap[d]) {
+      const dStr = d.toString().padStart(2, '0');
+      allRecordsMap[d] = {
+        dayNumber: d,
+        date: `${year}-${mStr}-${dStr}`,
+        sections: [
+          createEmptyTimeEntry(0),
+          createEmptyTimeEntry(1),
+          createEmptyTimeEntry(2),
+          createEmptyTimeEntry(3),
+        ],
+        durations: ['-', '-', '-', '-'],
+        totalDuration: '-',
+        otDuration: '-',
+        savedAt: '',
+        isHoliday: true,
+      };
+    }
+  }
+
+  const sortedDays = (Object.values(allRecordsMap) as DayRecord[]).sort(
+    (a, b) => a.dayNumber - b.dayNumber
+  );
 
   let totalMonthMinutes = 0;
   let totalMonthOtMinutes = 0;
 
-  sortedDays.forEach((dayRec) => {
+  // Only sum actual logged days
+  Object.values(monthObj.dailyEntries || {}).forEach((dayRec) => {
     const totals = calculateTotalDuration(dayRec.sections);
     totalMonthMinutes += totals.totalMinutes;
     totalMonthOtMinutes += totals.otMinutes;
@@ -74,7 +105,7 @@ export async function exportMonthExcelReport(monthName: string, monthObj: MonthD
   // Subtitle / Info bar (Row 2)
   worksheet.mergeCells('A2:Q2');
   const subtitleCell = worksheet.getCell('A2');
-  subtitleCell.value = `Month: ${monthName}   |   Logged Days: ${sortedDays.length}/31   |   Total Hours: ${formatTotalMinutes(totalMonthMinutes)}   |   Balance OT: ${formatTotalMinutes(totalMonthOtMinutes)}   |   Exported: ${new Date().toLocaleDateString()}`;
+  subtitleCell.value = `Month: ${monthName}   |   Logged Days: ${sortedDays.length}/31   |   Total Hours: ${formatTotalMinutes(totalMonthMinutes)}   |   Total OT: ${formatTotalMinutes(totalMonthOtMinutes)}   |   Exported: ${new Date().toLocaleDateString()}`;
   subtitleCell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF065F46' } };
   subtitleCell.fill = {
     type: 'pattern',
@@ -104,7 +135,7 @@ export async function exportMonthExcelReport(monthName: string, monthObj: MonthD
     'Sec 4 Out',
     'Sec 4 Dur',
     'Day Total',
-    'Balance OT',
+    'Total OT',
     'Saved At',
   ];
 
@@ -121,7 +152,7 @@ export async function exportMonthExcelReport(monthName: string, monthObj: MonthD
     // Special header colors for key metrics
     if (h === 'Day Total') {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } }; // Dark Slate
-    } else if (h === 'Balance OT') {
+    } else if (h === 'Total OT') {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF047857' } }; // Deep Emerald
     } else {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }; // Slate Gray
@@ -211,7 +242,7 @@ export async function exportMonthExcelReport(monthName: string, monthObj: MonthD
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
       }
 
-      // Highlight Balance OT (Col 16)
+      // Highlight Total OT (Col 16)
       if (colIdx === 15) {
         cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF166534' } };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } }; // Light Green Badge
@@ -285,7 +316,7 @@ export async function exportOverallExcelReport(allMonthsData: AllMonthsData): Pr
   title.alignment = { vertical: 'middle', horizontal: 'center' };
   summarySheet.getRow(1).height = 36;
 
-  const summaryHeaders = ['Month', 'Days Logged', 'Total Duration (HH:MM)', 'Balance OT', 'Total Minutes'];
+  const summaryHeaders = ['Month', 'Days Logged', 'Total Duration (HH:MM)', 'Total OT', 'Total Minutes'];
   const sHeadRow = summarySheet.getRow(3);
   sHeadRow.height = 26;
   summaryHeaders.forEach((h, idx) => {

@@ -34,8 +34,21 @@ export function createEmptyTimeEntry(index: number = 0): TimeEntry {
   };
 }
 
+export function getLocalTodayDateString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = (now.getMonth() + 1).toString().padStart(2, '0');
+  const day = now.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function getCurrentMonthName(): string {
+  const currentMonthIdx = new Date().getMonth();
+  return MONTHS[currentMonthIdx] || 'OCTOBER';
+}
+
 export function createDefaultMonthData(): MonthData {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalTodayDateString();
   return {
     date: today,
     sections: [
@@ -55,8 +68,7 @@ export function createInitialStorage(): AppStorage {
     months[month] = createDefaultMonthData();
   });
 
-  const currentMonthIdx = new Date().getMonth(); // 0 - 11
-  const defaultMonth = MONTHS[currentMonthIdx] || 'JUNE';
+  const defaultMonth = getCurrentMonthName();
 
   return {
     selectedMonth: defaultMonth,
@@ -79,6 +91,23 @@ export function loadStorage(): AppStorage {
     const initial = createInitialStorage();
     if (!parsed.months) {
       parsed.months = initial.months;
+    }
+
+    // Always default selectedMonth to real-world current month on app load
+    const currentMonthName = getCurrentMonthName();
+    const todayDateStr = getLocalTodayDateString();
+    parsed.selectedMonth = currentMonthName;
+
+    // Ensure the current month date is defaulted to today's date
+    if (!parsed.months[currentMonthName]) {
+      parsed.months[currentMonthName] = createDefaultMonthData();
+    } else {
+      parsed.months[currentMonthName].date = todayDateStr;
+      const todayDay = new Date().getDate();
+      const todaySavedEntry = parsed.months[currentMonthName].dailyEntries?.[todayDay];
+      if (todaySavedEntry && todaySavedEntry.sections) {
+        parsed.months[currentMonthName].sections = todaySavedEntry.sections;
+      }
     }
 
     MONTHS.forEach((m) => {

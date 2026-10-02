@@ -3,24 +3,36 @@ import { ConfirmationModal } from './components/ConfirmationModal';
 import { DateSelector } from './components/DateSelector';
 import { DayRecordsTable } from './components/DayRecordsTable';
 import { Header } from './components/Header';
+import { SavedSuccessAnimation } from './components/SavedSuccessAnimation';
 import { TimeSection } from './components/TimeSection';
 import { TotalSection } from './components/TotalSection';
 import { DayRecord, TimeEntry } from './types';
 import {
   clearCurrentMonthData,
   createEmptyTimeEntry,
+  getCurrentMonthName,
+  getLocalTodayDateString,
   loadStorage,
   MONTHS,
   saveStorage,
 } from './utils/storage';
 import { calculateTotalDuration } from './utils/timeCalculator';
 import { exportMonthExcelReport } from './utils/excelExporter';
+import { exportMonthPdfReport } from './utils/pdfExporter';
 import { getYearFromDate, isSunday } from './utils/dateUtils';
 import { Plus, X } from 'lucide-react';
 
 export default function App() {
   const [appState, setAppState] = useState(() => loadStorage());
   const [lastSavedNotice, setLastSavedNotice] = useState<string>('');
+
+  // Saved animation state in center of screen (displays for 2 seconds)
+  const [showSavedAnimation, setShowSavedAnimation] = useState<boolean>(false);
+  const [savedAnimationData, setSavedAnimationData] = useState<{
+    dayNumber: number;
+    totalFormatted: string;
+    otFormatted: string;
+  }>({ dayNumber: 1, totalFormatted: '', otFormatted: '' });
 
   // In-app confirmation modal state for Clear Month action
   const [confirmModal, setConfirmModal] = useState<{
@@ -146,16 +158,37 @@ export default function App() {
 
   // Change month from Dropdown or Prev/Next
   const handleSelectMonth = (monthName: string) => {
+    const currentRealMonth = getCurrentMonthName();
+    const isCurrentRealMonth = monthName === currentRealMonth;
+    const mIndex = MONTHS.indexOf(monthName as any);
+    const y = new Date().getFullYear();
+    const mStr = (mIndex + 1).toString().padStart(2, '0');
+
+    let newDate: string;
+    let targetDayNum: number;
+
+    if (isCurrentRealMonth) {
+      // Current real-world month defaults to today's date
+      newDate = getLocalTodayDateString();
+      targetDayNum = new Date().getDate();
+    } else {
+      // Non-current month MUST always start on Date 1
+      newDate = `${y}-${mStr}-01`;
+      targetDayNum = 1;
+    }
+
     setAppState((prev) => {
       const existing = prev.months[monthName];
-      let newDate = existing?.date;
+      const savedForTargetDay = existing?.dailyEntries?.[targetDayNum];
 
-      if (!newDate) {
-        const mIndex = MONTHS.indexOf(monthName as any);
-        const y = new Date().getFullYear();
-        const mStr = (mIndex + 1).toString().padStart(2, '0');
-        newDate = `${y}-${mStr}-01`;
-      }
+      const sectionsToUse: [TimeEntry, TimeEntry, TimeEntry, TimeEntry] = savedForTargetDay
+        ? JSON.parse(JSON.stringify(savedForTargetDay.sections))
+        : [
+            createEmptyTimeEntry(0),
+            createEmptyTimeEntry(1),
+            createEmptyTimeEntry(2),
+            createEmptyTimeEntry(3),
+          ];
 
       const nextState = {
         ...prev,
@@ -164,12 +197,7 @@ export default function App() {
           ...prev.months,
           [monthName]: {
             date: newDate,
-            sections: existing?.sections || [
-              createEmptyTimeEntry(0),
-              createEmptyTimeEntry(1),
-              createEmptyTimeEntry(2),
-              createEmptyTimeEntry(3),
-            ],
+            sections: sectionsToUse,
             dailyEntries: existing?.dailyEntries || {},
             lastSavedAt: existing?.lastSavedAt,
           },
@@ -179,6 +207,14 @@ export default function App() {
       saveStorage(nextState);
       return nextState;
     });
+
+    // Check if target day has 4th session to update showSection4
+    const existingTargetDay = appState.months[monthName]?.dailyEntries?.[targetDayNum];
+    if (existingTargetDay?.sections[3]?.startTime || existingTargetDay?.sections[3]?.endTime) {
+      setShowSection4(true);
+    } else {
+      setShowSection4(false);
+    }
   };
 
   // Select day number (1-31) from date strip
@@ -295,6 +331,14 @@ export default function App() {
       setShowSection4(false);
     }
 
+    // Show centered Saved animation
+    setSavedAnimationData({
+      dayNumber: currentDayNumber,
+      totalFormatted: totalCalculation.totalFormatted,
+      otFormatted: totalCalculation.otFormatted,
+    });
+    setShowSavedAnimation(true);
+
     setLastSavedNotice(`Day ${currentDayNumber} saved! Moved to Day ${nextDayNumber}`);
     setTimeout(() => {
       setLastSavedNotice('');
@@ -304,6 +348,11 @@ export default function App() {
   // Export current month report to Excel (.xlsx)
   const handleExportMonthExcel = async () => {
     await exportMonthExcelReport(currentMonth, monthData);
+  };
+
+  // Export current month report to PDF (.pdf)
+  const handleExportMonthPdf = async () => {
+    await exportMonthPdfReport(currentMonth, monthData);
   };
 
   // Clear current active month data with in-app confirmation modal
@@ -344,6 +393,15 @@ export default function App() {
       saveStorage(nextState);
       return nextState;
     });
+
+    // Show centered Saved animation
+    setSavedAnimationData({
+      dayNumber,
+      totalFormatted: record.totalDuration,
+      otFormatted: record.otDuration,
+    });
+    setShowSavedAnimation(true);
+
     setLastSavedNotice(`Logged Day ${dayNumber}`);
     setTimeout(() => setLastSavedNotice(''), 3000);
   };
@@ -401,26 +459,25 @@ export default function App() {
   const totalCalculation = calculateTotalDuration(monthData.sections);
 
   return (
-    <div className="min-h-screen bg-[#F6F7F9] p-2.5 sm:p-4 lg:p-5 flex flex-col w-full">
-      {/* 1. OVERALL APPLICATION CONTAINER: Full width fluid container */}
-      <div className="w-full bg-white border border-neutral-200/80 rounded-2xl p-4 sm:p-5 lg:p-6 shadow-xs flex-1 flex flex-col">
-        {/* 2. TOP HEADER (Branding, Date, Month with Dropdown, and Action Controls: SAVE, EXCEL, CLEAR) */}
+    <div className="min-h-screen xl:h-screen xl:overflow-hidden bg-[#F6F7F9] p-2 sm:p-2.5 xl:p-3 flex flex-col w-full">
+      {/* 1. OVERALL APPLICATION CONTAINER: Fitted full height on desktop, no outer scroll */}
+      <div className="w-full bg-white border border-neutral-200/80 rounded-2xl p-3 sm:p-3.5 xl:p-4 shadow-xs flex-1 flex flex-col h-full min-h-0 overflow-hidden">
+        {/* 2. TOP HEADER (Branding, Date, Month with Dropdown, and Action Controls: REPORT, CLEAR) */}
         <Header
           date={monthData.date}
           onDateChange={handleDateChange}
           selectedMonth={currentMonth}
           onSelectMonth={handleSelectMonth}
           hasSavedData={hasSavedDataForCurrentDay}
-          onSave={handleExplicitSave}
-          onExportMonthExcel={handleExportMonthExcel}
+          onExportExcel={handleExportMonthExcel}
+          onExportPdf={handleExportMonthPdf}
           onClearCurrentMonth={handleClearCurrentMonth}
-          lastSavedNotice={lastSavedNotice || (monthData.lastSavedAt ? `Saved at ${monthData.lastSavedAt}` : '')}
         />
 
-        {/* 3. TWO-COLUMN LAYOUT: Left Calculator + Right Side Monthly Daily Logs (Reduced width: 8 cols vs 4 cols) */}
-        <div className="mt-3.5 grid grid-cols-1 xl:grid-cols-12 gap-5 items-start flex-1">
-          {/* LEFT COLUMN: Date Selector, Compact Sessions, Total Time (Wider: 8 columns) */}
-          <div className="xl:col-span-8 2xl:col-span-8 flex flex-col">
+        {/* 3. TWO-COLUMN LAYOUT: Left Calculator + Right Side Monthly Daily Logs (ONLY logs area scrolls) */}
+        <div className="mt-2 grid grid-cols-1 xl:grid-cols-12 gap-3.5 flex-1 min-h-0 overflow-hidden items-stretch">
+          {/* LEFT COLUMN: Date Selector, Compact Sessions, Total Time (Self-contained, no scroll needed on desktop) */}
+          <div className="xl:col-span-8 2xl:col-span-8 flex flex-col justify-between min-h-0 overflow-y-auto xl:overflow-hidden pr-0.5">
             {/* DATE SELECTOR (DAYS 1 TO 31) */}
             <DateSelector
               currentDate={monthData.date}
@@ -430,22 +487,20 @@ export default function App() {
             />
 
             {/* SESSIONS SECTION */}
-            <div className="w-full my-1.5">
-              <div className="flex items-center justify-between mb-2 px-1">
+            <div className="w-full my-1">
+              <div className="flex items-center justify-between mb-1.5 px-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-neutral-600">
                     Daily Work Sessions
                   </span>
-                  <span className="text-neutral-300">·</span>
-                  {isCurrentSunday ? (
-                    <span className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                      Sunday — Holiday
-                    </span>
-                  ) : (
-                    <span className="text-xs text-neutral-500">
-                      Enter start & end times
-                    </span>
+                  {isCurrentSunday && (
+                    <>
+                      <span className="text-neutral-300">·</span>
+                      <span className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                        Sunday — Holiday
+                      </span>
+                    </>
                   )}
                 </div>
 
@@ -478,7 +533,7 @@ export default function App() {
               <div
                 className={`grid grid-cols-1 sm:grid-cols-2 ${
                   showSection4 ? 'lg:grid-cols-2 2xl:grid-cols-4' : 'lg:grid-cols-3'
-                } gap-3 w-full`}
+                } gap-2.5 w-full`}
               >
                 {/* CARD 01: Morning / Session 1 */}
                 <TimeSection
@@ -532,8 +587,8 @@ export default function App() {
             />
           </div>
 
-          {/* RIGHT COLUMN: Monthly Daily Logs (Reduced width: 4 columns out of 12) */}
-          <div className="xl:col-span-4 2xl:col-span-4 xl:sticky xl:top-4 w-full">
+          {/* RIGHT COLUMN: Monthly Daily Logs (Reduced width: 4 columns out of 12, ONLY this container scrolls) */}
+          <div className="xl:col-span-4 2xl:col-span-4 flex flex-col h-full min-h-0 overflow-hidden">
             <DayRecordsTable
               selectedMonth={currentMonth}
               dailyEntries={monthData.dailyEntries || {}}
@@ -547,7 +602,7 @@ export default function App() {
         </div>
 
         {/* 4. FOOTER: Powered by Karthi Designer with clickable link opening in new tab */}
-        <footer className="w-full mt-4 pt-3.5 pb-1 border-t border-neutral-200/80 flex items-center justify-center text-center text-xs text-neutral-500 font-medium tracking-wide">
+        <footer className="w-full mt-2 pt-2 pb-0.5 border-t border-neutral-200/80 flex items-center justify-center text-center text-xs text-neutral-500 font-medium tracking-wide shrink-0">
           <span>Time Calculator</span>
           <span className="mx-2 text-neutral-400 font-bold">*</span>
           <span>Powered by </span>
@@ -571,6 +626,15 @@ export default function App() {
         isDanger={confirmModal.isDanger}
         onConfirm={confirmModal.onConfirm}
         onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* CENTERED SAVED ANIMATION OVERLAY (2 seconds) */}
+      <SavedSuccessAnimation
+        show={showSavedAnimation}
+        onDismiss={() => setShowSavedAnimation(false)}
+        dayNumber={savedAnimationData.dayNumber}
+        totalFormatted={savedAnimationData.totalFormatted}
+        otFormatted={savedAnimationData.otFormatted}
       />
     </div>
   );

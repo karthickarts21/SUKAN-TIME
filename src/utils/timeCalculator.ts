@@ -83,7 +83,7 @@ export function formatTotalMinutes(totalMinutes: number): string {
 }
 
 /**
- * Calculates Overtime (Balance OT) by subtracting 8 Hours 30 Minutes (510 mins) from total minutes.
+ * Calculates Overtime (OT) by subtracting 8 Hours 30 Minutes (510 mins) from total minutes.
  */
 export function calculateOvertime(totalMinutes: number, standardMinutes = 510): { formatted: string; minutes: number } {
   const otMinutes = totalMinutes - standardMinutes;
@@ -99,7 +99,7 @@ export function calculateOvertime(totalMinutes: number, standardMinutes = 510): 
 }
 
 /**
- * Sums the durations of all 4 sections and calculates Balance OT (deducting 8.30 hours).
+ * Sums the durations of all 4 sections and calculates OT (deducting 8.30 hours).
  */
 export function calculateTotalDuration(sections: [TimeEntry, TimeEntry, TimeEntry, TimeEntry]): {
   durations: [string, string, string, string];
