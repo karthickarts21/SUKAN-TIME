@@ -36,9 +36,6 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
   const displayTitle = title || meta.title;
   const displaySubtitle = subtitle || meta.subtitle;
 
-  const startTimePickerRef = React.useRef<HTMLInputElement>(null);
-  const endTimePickerRef = React.useRef<HTMLInputElement>(null);
-
   const handleStartTimeChange = (val: string) => {
     onChange({ ...entry, startTime: val });
   };
@@ -83,22 +80,6 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
         endTime: formattedTime,
         endPeriod: period,
       });
-    }
-  };
-
-  const openStartTimePicker = () => {
-    try {
-      startTimePickerRef.current?.showPicker?.();
-    } catch {
-      startTimePickerRef.current?.focus();
-    }
-  };
-
-  const openEndTimePicker = () => {
-    try {
-      endTimePickerRef.current?.showPicker?.();
-    } catch {
-      endTimePickerRef.current?.focus();
     }
   };
 
@@ -178,21 +159,18 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
             </label>
             <div className="flex items-center gap-1.5">
               <div className="relative flex-1 min-w-0 flex items-center">
-                <button
-                  type="button"
-                  onClick={openStartTimePicker}
-                  className="absolute left-2.5 flex items-center justify-center text-neutral-400 hover:text-neutral-800 transition-colors cursor-pointer z-10"
+                <div
+                  className="absolute left-2.5 w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-800 transition-colors z-10"
                   title="Select time"
                 >
-                  <Clock className="w-3.5 h-3.5" />
-                </button>
-                <input
-                  ref={startTimePickerRef}
-                  type="time"
-                  className="sr-only"
-                  tabIndex={-1}
-                  onChange={(e) => handleNativePickerChange(e.target.value, 'startTime')}
-                />
+                  <Clock className="w-3.5 h-3.5 pointer-events-none" />
+                  <input
+                    type="time"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    onChange={(e) => handleNativePickerChange(e.target.value, 'startTime')}
+                    aria-label="Select start time"
+                  />
+                </div>
                 <input
                   type="text"
                   placeholder="09:00"
@@ -221,21 +199,18 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
             </label>
             <div className="flex items-center gap-1.5">
               <div className="relative flex-1 min-w-0 flex items-center">
-                <button
-                  type="button"
-                  onClick={openEndTimePicker}
-                  className="absolute left-2.5 flex items-center justify-center text-neutral-400 hover:text-neutral-800 transition-colors cursor-pointer z-10"
+                <div
+                  className="absolute left-2.5 w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-800 transition-colors z-10"
                   title="Select time"
                 >
-                  <Clock className="w-3.5 h-3.5" />
-                </button>
-                <input
-                  ref={endTimePickerRef}
-                  type="time"
-                  className="sr-only"
-                  tabIndex={-1}
-                  onChange={(e) => handleNativePickerChange(e.target.value, 'endTime')}
-                />
+                  <Clock className="w-3.5 h-3.5 pointer-events-none" />
+                  <input
+                    type="time"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    onChange={(e) => handleNativePickerChange(e.target.value, 'endTime')}
+                    aria-label="Select end time"
+                  />
+                </div>
                 <input
                   type="text"
                   placeholder="01:00"

@@ -133,3 +133,154 @@ export function formatTimeInput(input: string): string {
   const clean = input.replace(/[^\d:]/g, '');
   return clean;
 }
+
+export interface EarlyIncentiveResult {
+  amount: number; // 150, -150, or 0
+  formatted: string; // "+150", "-150", "0"
+  reason: string;
+  hasEntries: boolean;
+}
+
+/**
+ * Calculates Early Incentive:
+ * 1. Start <= 9:30 AM and End >= 6:30 PM -> +150
+ * 2. Start >= 9:31 AM and End >= 6:30 PM -> -150
+ * 3. Start <= 9:30 AM and End < 6:30 PM -> -150
+ * 4. Start >= 9:31 AM and End < 6:30 PM -> -300
+ */
+export function calculateEarlyIncentive(sections: TimeEntry[]): EarlyIncentiveResult {
+  let firstStartMinutes: number | null = null;
+  let latestEndMinutes: number | null = null;
+  let hasEntries = false;
+
+  for (const s of sections) {
+    if (s.startTime) {
+      hasEntries = true;
+      const m = parseTimeToMinutes(s.startTime, s.startPeriod);
+      if (m !== null && (firstStartMinutes === null || m < firstStartMinutes)) {
+        firstStartMinutes = m;
+      }
+    }
+    if (s.endTime) {
+      hasEntries = true;
+      const m = parseTimeToMinutes(s.endTime, s.endPeriod);
+      if (m !== null && (latestEndMinutes === null || m > latestEndMinutes)) {
+        latestEndMinutes = m;
+      }
+    }
+  }
+
+  if (!hasEntries || firstStartMinutes === null) {
+    return {
+      amount: 0,
+      formatted: '0',
+      reason: 'Enter shift start & end times',
+      hasEntries: false,
+    };
+  }
+
+  // 9:30 AM = 570 mins (or 9:30 PM / 1290 mins)
+  const isStartBy930 = firstStartMinutes <= 570 || firstStartMinutes === 1290;
+  // 9:31 AM - 9:40 AM (571 to 580 mins)
+  const isStartBetween931And940 = firstStartMinutes > 570 && firstStartMinutes <= 580;
+  // After 9:40 AM (> 580 mins)
+  const isStartAfter940 = firstStartMinutes > 580 && firstStartMinutes !== 1290;
+  const isStartAfter930 = !isStartBy930;
+
+  // 6:30 PM = 18:30 = 1110 mins
+  const isEndAtOrAfter630 = latestEndMinutes !== null && latestEndMinutes >= 1110;
+  const isEndBefore630 = latestEndMinutes !== null && latestEndMinutes < 1110;
+
+  // 1. 9.30 am vanthuttu, 6.30 pm kku mela iruntha -> +150
+  if (isStartBy930 && isEndAtOrAfter630) {
+    return {
+      amount: 150,
+      formatted: '+150',
+      reason: 'Reported by 9:30 AM & worked until 6:30 PM (+150)',
+      hasEntries: true,
+    };
+  }
+
+  // 2. 9.40 am kku mela vanthu, 6.30 pm kku mela iruntha -> -300
+  if (isStartAfter940 && isEndAtOrAfter630) {
+    return {
+      amount: -300,
+      formatted: '-300',
+      reason: 'Late arrival after 9:40 AM (-300)',
+      hasEntries: true,
+    };
+  }
+
+  // 3. 9.31 am to 9.40 am vanthu, 6.30 pm kku mela iruntha -> -150
+  if (isStartBetween931And940 && isEndAtOrAfter630) {
+    return {
+      amount: -150,
+      formatted: '-150',
+      reason: 'Late arrival (9:31–9:40 AM) & worked until 6:30 PM (-150)',
+      hasEntries: true,
+    };
+  }
+
+  // 4. 9.30 am kku vanthuttu 6.30 pm munnadiye time iruntha -> -150
+  if (isStartBy930 && isEndBefore630) {
+    return {
+      amount: -150,
+      formatted: '-150',
+      reason: 'Shift ended before 6:30 PM (-150)',
+      hasEntries: true,
+    };
+  }
+
+  // 5. 9.30 am kku mela 6.30 pm kkum ulla time iruntha -> -300
+  if (isStartAfter930 && isEndBefore630) {
+    return {
+      amount: -300,
+      formatted: '-300',
+      reason: 'Late arrival after 9:30 AM & left before 6:30 PM (-300)',
+      hasEntries: true,
+    };
+  }
+
+  // Only start time entered so far:
+  if (isStartBy930 && latestEndMinutes === null) {
+    return {
+      amount: 150,
+      formatted: '+150',
+      reason: 'Started by 9:30 AM (+150 pending end time)',
+      hasEntries: true,
+    };
+  }
+
+  if (isStartBetween931And940 && latestEndMinutes === null) {
+    return {
+      amount: -150,
+      formatted: '-150',
+      reason: 'Started between 9:31–9:40 AM (-150)',
+      hasEntries: true,
+    };
+  }
+
+  if (isStartAfter940 && latestEndMinutes === null) {
+    return {
+      amount: -300,
+      formatted: '-300',
+      reason: 'Started after 9:40 AM (-300)',
+      hasEntries: true,
+    };
+  }
+
+  return {
+    amount: 0,
+    formatted: '0',
+    reason: 'Standard shift',
+    hasEntries: true,
+  };
+}
+
+/**
+ * Calculates Bill Incentive: billCount * 30
+ */
+export function calculateBillIncentive(billCount: number): number {
+  if (isNaN(billCount) || billCount <= 0) return 0;
+  return Math.round(billCount * 30);
+}

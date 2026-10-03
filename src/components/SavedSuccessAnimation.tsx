@@ -7,6 +7,8 @@ interface SavedSuccessAnimationProps {
   dayNumber?: number;
   totalFormatted?: string;
   otFormatted?: string;
+  earlyIncentive?: number;
+  billIncentive?: number;
 }
 
 export const SavedSuccessAnimation: React.FC<SavedSuccessAnimationProps> = ({
@@ -15,6 +17,8 @@ export const SavedSuccessAnimation: React.FC<SavedSuccessAnimationProps> = ({
   dayNumber,
   totalFormatted,
   otFormatted,
+  earlyIncentive,
+  billIncentive,
 }) => {
   useEffect(() => {
     if (!show) return;
@@ -53,7 +57,7 @@ export const SavedSuccessAnimation: React.FC<SavedSuccessAnimationProps> = ({
         </p>
 
         {/* METRICS PREVIEW */}
-        {(totalFormatted || otFormatted) && (
+        {(totalFormatted || otFormatted || (earlyIncentive !== undefined && earlyIncentive !== 0)) && (
           <div className="mt-3.5 w-full bg-neutral-50 border border-neutral-200/70 rounded-xl p-2.5 flex items-center justify-around">
             {totalFormatted && (
               <div>
@@ -77,6 +81,40 @@ export const SavedSuccessAnimation: React.FC<SavedSuccessAnimationProps> = ({
                   {otFormatted}
                 </span>
               </div>
+            )}
+            {earlyIncentive !== undefined && earlyIncentive !== 0 && (
+              <>
+                <span className="text-neutral-300 text-xs">|</span>
+                <div>
+                  <span
+                    className={`block text-[9px] font-bold uppercase tracking-wider ${
+                      earlyIncentive > 0 ? 'text-emerald-700' : 'text-rose-700'
+                    }`}
+                  >
+                    Early Inc
+                  </span>
+                  <span
+                    className={`font-mono font-bold text-xs ${
+                      earlyIncentive > 0 ? 'text-emerald-800' : 'text-rose-800'
+                    }`}
+                  >
+                    {earlyIncentive > 0 ? `+${earlyIncentive}` : `${earlyIncentive}`}
+                  </span>
+                </div>
+              </>
+            )}
+            {billIncentive !== undefined && billIncentive > 0 && (
+              <>
+                <span className="text-neutral-300 text-xs">|</span>
+                <div>
+                  <span className="block text-[9px] font-bold uppercase tracking-wider text-indigo-700">
+                    Bill Inc
+                  </span>
+                  <span className="font-mono font-bold text-xs text-indigo-800">
+                    +{billIncentive}
+                  </span>
+                </div>
+              </>
             )}
           </div>
         )}

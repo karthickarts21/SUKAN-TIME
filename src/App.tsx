@@ -16,7 +16,11 @@ import {
   MONTHS,
   saveStorage,
 } from './utils/storage';
-import { calculateTotalDuration } from './utils/timeCalculator';
+import {
+  calculateBillIncentive,
+  calculateEarlyIncentive,
+  calculateTotalDuration,
+} from './utils/timeCalculator';
 import { exportMonthExcelReport } from './utils/excelExporter';
 import { exportMonthPdfReport } from './utils/pdfExporter';
 import { getYearFromDate, isSunday } from './utils/dateUtils';
@@ -26,12 +30,14 @@ export default function App() {
   const [appState, setAppState] = useState(() => loadStorage());
   const [lastSavedNotice, setLastSavedNotice] = useState<string>('');
 
-  // Saved animation state in center of screen (displays for 2 seconds)
+  // Saved animation state in center of screen (displays for 1 second)
   const [showSavedAnimation, setShowSavedAnimation] = useState<boolean>(false);
   const [savedAnimationData, setSavedAnimationData] = useState<{
     dayNumber: number;
     totalFormatted: string;
     otFormatted: string;
+    earlyIncentive?: number;
+    billIncentive?: number;
   }>({ dayNumber: 1, totalFormatted: '', otFormatted: '' });
 
   // In-app confirmation modal state for Clear Month action
@@ -246,6 +252,7 @@ export default function App() {
             ...currentM,
             date: newDateStr,
             sections: sectionsToUse,
+            billCount: existingDayRecord?.billCount ?? undefined,
           },
         },
       };
@@ -259,10 +266,32 @@ export default function App() {
     }
   };
 
+  // Handle manual Bill Count change for Bill Incentive
+  const handleBillCountChange = (count: number | '') => {
+    setAppState((prev) => {
+      const cur = prev.months[currentMonth];
+      const nextState = {
+        ...prev,
+        months: {
+          ...prev.months,
+          [currentMonth]: {
+            ...cur,
+            billCount: count === '' ? undefined : count,
+          },
+        },
+      };
+      saveStorage(nextState);
+      return nextState;
+    });
+  };
+
   // Explicit Save Handler: saves current day and automatically moves to the next day
   const handleExplicitSave = () => {
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const calcResult = calculateTotalDuration(monthData.sections);
+    const incentiveResult = calculateEarlyIncentive(monthData.sections);
+    const currentBillCount = typeof monthData.billCount === 'number' ? monthData.billCount : 0;
+    const currentBillIncentive = calculateBillIncentive(currentBillCount);
 
     const newDayRecord: DayRecord = {
       date: `${currentMonth} Date ${currentDayNumber}`,
@@ -272,6 +301,9 @@ export default function App() {
       totalDuration: calcResult.totalFormatted,
       otDuration: calcResult.otFormatted,
       savedAt: timeStr,
+      earlyIncentive: incentiveResult.amount,
+      billCount: currentBillCount > 0 ? currentBillCount : undefined,
+      billIncentive: currentBillIncentive > 0 ? currentBillIncentive : undefined,
     };
 
     // Calculate next day number (advances to next day 1-31)
@@ -313,6 +345,7 @@ export default function App() {
             ...cur,
             date: nextDateStr,
             sections: nextSections,
+            billCount: existingNextDay?.billCount ?? undefined,
             lastSavedAt: timeStr,
             dailyEntries: updatedDailyEntries,
           },
@@ -334,8 +367,10 @@ export default function App() {
     // Show centered Saved animation
     setSavedAnimationData({
       dayNumber: currentDayNumber,
-      totalFormatted: totalCalculation.totalFormatted,
-      otFormatted: totalCalculation.otFormatted,
+      totalFormatted: calcResult.totalFormatted,
+      otFormatted: calcResult.otFormatted,
+      earlyIncentive: incentiveResult.amount,
+      billIncentive: currentBillIncentive,
     });
     setShowSavedAnimation(true);
 
@@ -399,6 +434,8 @@ export default function App() {
       dayNumber,
       totalFormatted: record.totalDuration,
       otFormatted: record.otDuration,
+      earlyIncentive: record.earlyIncentive,
+      billIncentive: record.billIncentive,
     });
     setShowSavedAnimation(true);
 
@@ -446,6 +483,7 @@ export default function App() {
             ...cur,
             date: newDateStr,
             sections: JSON.parse(JSON.stringify(record.sections)),
+            billCount: record.billCount,
           },
         },
       };
@@ -455,8 +493,9 @@ export default function App() {
     }
   };
 
-  // Calculate total duration for current active month sections
+  // Calculate total duration & early incentive for current active month sections
   const totalCalculation = calculateTotalDuration(monthData.sections);
+  const earlyIncentiveCalculation = calculateEarlyIncentive(monthData.sections);
 
   return (
     <div className="min-h-screen xl:h-screen xl:overflow-hidden bg-[#F6F7F9] p-2 sm:p-2.5 xl:p-3 flex flex-col w-full">
@@ -476,8 +515,8 @@ export default function App() {
 
         {/* 3. TWO-COLUMN LAYOUT: Left Calculator + Right Side Monthly Daily Logs (ONLY logs area scrolls) */}
         <div className="mt-2 grid grid-cols-1 xl:grid-cols-12 gap-3.5 flex-1 min-h-0 overflow-hidden items-stretch">
-          {/* LEFT COLUMN: Date Selector, Compact Sessions, Total Time (Self-contained, no scroll needed on desktop) */}
-          <div className="xl:col-span-8 2xl:col-span-8 flex flex-col justify-between min-h-0 overflow-y-auto xl:overflow-hidden pr-0.5">
+          {/* LEFT COLUMN: Date Selector, Compact Sessions, Total Time (Tight, natural spacing) */}
+          <div className="xl:col-span-8 2xl:col-span-8 flex flex-col justify-start min-h-0 overflow-y-auto xl:overflow-hidden pr-0.5 space-y-2 sm:space-y-2.5">
             {/* DATE SELECTOR (DAYS 1 TO 31) */}
             <DateSelector
               currentDate={monthData.date}
@@ -487,7 +526,7 @@ export default function App() {
             />
 
             {/* SESSIONS SECTION */}
-            <div className="w-full my-1">
+            <div className="w-full">
               <div className="flex items-center justify-between mb-1.5 px-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-neutral-600">
@@ -579,10 +618,13 @@ export default function App() {
               </div>
             </div>
 
-            {/* TOTAL WORKING TIME SECTION */}
+            {/* TOTAL WORKING TIME SECTION WITH EARLY & BILL INCENTIVE */}
             <TotalSection
               totalFormatted={totalCalculation.totalFormatted}
               otFormatted={totalCalculation.otFormatted}
+              earlyIncentive={earlyIncentiveCalculation}
+              billCount={monthData.billCount ?? ''}
+              onBillCountChange={handleBillCountChange}
               onSave={handleExplicitSave}
             />
           </div>
@@ -628,13 +670,15 @@ export default function App() {
         onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
       />
 
-      {/* CENTERED SAVED ANIMATION OVERLAY (2 seconds) */}
+      {/* CENTERED SAVED ANIMATION OVERLAY (1 second) */}
       <SavedSuccessAnimation
         show={showSavedAnimation}
         onDismiss={() => setShowSavedAnimation(false)}
         dayNumber={savedAnimationData.dayNumber}
         totalFormatted={savedAnimationData.totalFormatted}
         otFormatted={savedAnimationData.otFormatted}
+        earlyIncentive={savedAnimationData.earlyIncentive}
+        billIncentive={savedAnimationData.billIncentive}
       />
     </div>
   );

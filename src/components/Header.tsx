@@ -196,11 +196,8 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">
                 DATE:
               </span>
-              <div
-                onClick={() => dateInputRef.current?.showPicker?.() || dateInputRef.current?.focus()}
-                className="relative flex-1 flex items-center justify-between gap-1.5 px-2 sm:px-2.5 py-1.5 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 hover:border-neutral-300 rounded-lg cursor-pointer transition-colors shadow-2xs min-w-0"
-              >
-                <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+              <div className="relative flex-1 flex items-center justify-between gap-1.5 px-2 sm:px-2.5 py-1.5 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 hover:border-neutral-300 rounded-lg cursor-pointer transition-colors shadow-2xs min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0 overflow-hidden pointer-events-none">
                   <Calendar className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
                   <span className="text-xs font-semibold font-mono tracking-tight text-neutral-900 tabular-nums truncate">
                     {formattedDateDisplay}

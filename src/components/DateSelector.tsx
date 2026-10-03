@@ -33,7 +33,7 @@ export const DateSelector: React.FC<DateSelectorProps> = ({
   const savedCount = Object.keys(dailyEntries).length;
 
   return (
-    <div className="w-full my-2 p-2.5 sm:p-3 bg-white border border-neutral-200/80 rounded-xl shadow-xs">
+    <div className="w-full p-2.5 sm:p-3 bg-white border border-neutral-200/80 rounded-xl shadow-xs">
       <div className="flex items-center justify-between mb-2 px-1">
         <span className="text-xs font-bold uppercase tracking-wider text-neutral-600">
           Day Selector

@@ -16,6 +16,9 @@ export interface DayRecord {
   otDuration?: string;
   savedAt: string;
   isHoliday?: boolean;
+  earlyIncentive?: number;
+  billCount?: number;
+  billIncentive?: number;
 }
 
 export interface MonthData {
@@ -23,6 +26,7 @@ export interface MonthData {
   sections: [TimeEntry, TimeEntry, TimeEntry, TimeEntry];
   dailyEntries?: Record<number, DayRecord>; // 1 to 31
   lastSavedAt?: string;
+  billCount?: number;
 }
 
 export type AllMonthsData = Record<string, MonthData>;

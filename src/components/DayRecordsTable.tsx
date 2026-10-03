@@ -83,6 +83,23 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
     0
   );
 
+  const totalBillCount = (Object.values(dailyEntries) as DayRecord[]).reduce(
+    (acc: number, entry: DayRecord) => acc + (entry.billCount || 0),
+    0
+  );
+
+  const grandTotalBillIncentive = (Object.values(dailyEntries) as DayRecord[]).reduce(
+    (acc: number, entry: DayRecord) => acc + (entry.billIncentive || 0),
+    0
+  );
+
+  const grandTotalEarlyIncentive = (Object.values(dailyEntries) as DayRecord[]).reduce(
+    (acc: number, entry: DayRecord) => acc + (entry.earlyIncentive || 0),
+    0
+  );
+
+  const grandTotalIncentive = grandTotalEarlyIncentive + grandTotalBillIncentive;
+
   return (
     <aside className="w-full bg-white border border-neutral-200/90 rounded-2xl p-3 sm:p-4 shadow-xs flex flex-col h-full min-h-0 overflow-hidden">
       {/* HEADER */}
@@ -131,25 +148,90 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
           </div>
         </div>
 
-        {/* SUMMARY STATS BADGES (Grand Total & Total OT) */}
+        {/* SUMMARY STATS CARDS (Grand Total, Total OT, Bill Incentive Total, Early Incentive) */}
         <div className="grid grid-cols-2 gap-2">
-          {/* 1. Grand Total */}
-          <div className="bg-neutral-50 border border-neutral-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-center">
-            <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-neutral-500 leading-tight">
-              Grand Total
-            </span>
-            <span className="font-mono font-bold text-xs sm:text-sm md:text-base text-neutral-900 tabular-nums mt-0.5">
+          {/* 1. Grand Total: Full time WITHOUT 8.5 hr deducted */}
+          <div className="bg-neutral-50 border border-neutral-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs">
+            <div className="flex items-center justify-between gap-1">
+              <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-neutral-500 truncate">
+                Grand Total
+              </span>
+              <span className="text-[8px] font-bold uppercase tracking-tight text-neutral-600 bg-neutral-200/70 px-1 py-0.2 rounded shrink-0">
+                Full Time
+              </span>
+            </div>
+            <span className="font-mono font-extrabold text-xs sm:text-sm md:text-base text-neutral-900 tabular-nums mt-1">
               {formatTotalMinutes(grandTotalMinutes)}
             </span>
           </div>
 
-          {/* 2. Total OT */}
-          <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-center">
-            <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-800 leading-tight">
-              Total OT
-            </span>
-            <span className="font-mono font-bold text-xs sm:text-sm md:text-base text-emerald-900 tabular-nums mt-0.5">
+          {/* 2. Total OT: 8.5 hr deducted per day */}
+          <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs">
+            <div className="flex items-center justify-between gap-1">
+              <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-800 truncate">
+                Total OT
+              </span>
+              <span className="text-[8px] font-bold uppercase tracking-tight text-emerald-700 bg-emerald-100/70 px-1 py-0.2 rounded shrink-0">
+                -8.5h/day
+              </span>
+            </div>
+            <span className="font-mono font-extrabold text-xs sm:text-sm md:text-base text-emerald-900 tabular-nums mt-1">
               {formatTotalMinutes(grandTotalOtMinutes)}
+            </span>
+          </div>
+
+          {/* 3. Bill Incentive Total */}
+          <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs">
+            <div className="flex items-center justify-between gap-1">
+              <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-indigo-900 truncate">
+                Bill Inc Total
+              </span>
+              <span className="text-[8px] font-bold uppercase tracking-tight text-indigo-700 bg-indigo-100/70 px-1 py-0.2 rounded shrink-0">
+                {totalBillCount} bills
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between mt-1">
+              <span className="font-mono font-extrabold text-xs sm:text-sm md:text-base text-indigo-950 tabular-nums">
+                ₹{grandTotalBillIncentive}
+              </span>
+              <span className="text-[9px] text-indigo-500 font-mono">
+                (@ ₹30)
+              </span>
+            </div>
+          </div>
+
+          {/* 4. Early Incentive Total */}
+          <div
+            className={`rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs border ${
+              grandTotalEarlyIncentive > 0
+                ? 'bg-emerald-50/50 border-emerald-200/80 text-emerald-950'
+                : grandTotalEarlyIncentive < 0
+                ? 'bg-rose-50/50 border-rose-200/80 text-rose-950'
+                : 'bg-neutral-50 border-neutral-200/80 text-neutral-800'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-1">
+              <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider truncate">
+                Early Incentive
+              </span>
+              <span className="text-[8px] font-bold uppercase tracking-tight px-1 py-0.2 rounded shrink-0 bg-neutral-200/60 text-neutral-600">
+                Attendance
+              </span>
+            </div>
+            <span
+              className={`font-mono font-extrabold text-xs sm:text-sm md:text-base tabular-nums mt-1 ${
+                grandTotalEarlyIncentive > 0
+                  ? 'text-emerald-700'
+                  : grandTotalEarlyIncentive < 0
+                  ? 'text-rose-700'
+                  : 'text-neutral-500'
+              }`}
+            >
+              {grandTotalEarlyIncentive > 0
+                ? `+₹${grandTotalEarlyIncentive}`
+                : grandTotalEarlyIncentive < 0
+                ? `-₹${Math.abs(grandTotalEarlyIncentive)}`
+                : '₹0'}
             </span>
           </div>
         </div>
@@ -241,6 +323,18 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                         {isSaved ? (entry.otDuration || entryCalc?.otFormatted) : '-'}
                       </span>
                     </div>
+                    {isSaved && entry.earlyIncentive !== undefined && entry.earlyIncentive !== 0 && (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-medium text-neutral-500">Inc:</span>
+                        <span
+                          className={`font-mono font-bold tabular-nums text-[11px] ${
+                            entry.earlyIncentive > 0 ? 'text-emerald-700' : 'text-rose-700'
+                          }`}
+                        >
+                          {entry.earlyIncentive > 0 ? `+${entry.earlyIncentive}` : `${entry.earlyIncentive}`}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* SESSIONS BREAKDOWN PILLS */}
@@ -273,6 +367,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                   <th className="px-1.5 sm:px-2 py-1.5">Date</th>
                   <th className="px-1.5 sm:px-2 py-1.5 text-center font-bold text-neutral-900">Total</th>
                   <th className="px-1.5 sm:px-2 py-1.5 text-center font-bold text-emerald-800">OT</th>
+                  <th className="px-1 sm:px-1.5 py-1.5 text-center font-bold text-neutral-700">Inc</th>
                   <th className="px-1.5 sm:px-2 py-1.5 text-center">Action</th>
                 </tr>
               </thead>
@@ -316,6 +411,22 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                       <td className="px-1.5 sm:px-2 py-1.5 text-center font-mono font-bold text-emerald-800 tabular-nums text-[11px]">
                         {isSaved ? (entry.otDuration || entryCalc?.otFormatted) : '-'}
                       </td>
+                      <td className="px-1 sm:px-1.5 py-1.5 text-center font-mono font-bold tabular-nums text-[10px]">
+                        {isSaved && entry.earlyIncentive !== undefined && entry.earlyIncentive !== 0 ? (
+                          <span
+                            className={`px-1 py-0.2 rounded font-bold text-[9px] ${
+                              entry.earlyIncentive > 0
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}
+                            title={`Early Incentive: ${entry.earlyIncentive}`}
+                          >
+                            {entry.earlyIncentive > 0 ? `+${entry.earlyIncentive}` : entry.earlyIncentive}
+                          </span>
+                        ) : (
+                          <span className="text-neutral-300">-</span>
+                        )}
+                      </td>
                       <td className="px-1.5 sm:px-2 py-1.5 text-center whitespace-nowrap">
                         <div className="inline-flex items-center gap-0.5 sm:gap-1">
                           <button
@@ -348,13 +459,33 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
       </div>
 
       {/* FOOTER ACCUMULATION */}
-      <div className="mt-2 pt-2 border-t border-neutral-100 flex items-center justify-between text-xs shrink-0">
-        <span className="text-[10px] sm:text-[11px] font-semibold text-neutral-500 uppercase tracking-wide">
-          {selectedMonth} Grand Total:
-        </span>
-        <span className="font-mono font-extrabold text-xs sm:text-sm text-neutral-900 tabular-nums">
-          {formatTotalMinutes(grandTotalMinutes)}
-        </span>
+      <div className="mt-2 pt-2 border-t border-neutral-100 flex items-center justify-between text-xs shrink-0 flex-wrap gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] sm:text-[11px] font-semibold text-neutral-500 uppercase tracking-wide">
+            {selectedMonth} Full Time:
+          </span>
+          <span className="font-mono font-extrabold text-xs sm:text-sm text-neutral-900 tabular-nums">
+            {formatTotalMinutes(grandTotalMinutes)}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2.5 font-mono text-[11px] font-bold">
+          <div className="flex items-center gap-1">
+            <span className="text-neutral-400 text-[9px] uppercase">OT:</span>
+            <span className="text-emerald-800 font-bold">
+              {formatTotalMinutes(grandTotalOtMinutes)}
+            </span>
+          </div>
+
+          {grandTotalBillIncentive > 0 && (
+            <div className="flex items-center gap-1">
+              <span className="text-neutral-400 text-[9px] uppercase">Bills:</span>
+              <span className="text-indigo-800 font-bold">
+                ₹{grandTotalBillIncentive}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </aside>
   );
