@@ -16,6 +16,8 @@ interface DayRecordsTableProps {
   dailyEntries: Record<number, DayRecord>;
   currentSections: [TimeEntry, TimeEntry, TimeEntry, TimeEntry];
   currentDate: string;
+  manualHolidays?: number[];
+  onToggleHoliday?: (dayNumber: number) => void;
   onSaveDayRecord?: (dayNumber: number, record: DayRecord) => void;
   onDeleteDayRecord: (dayNumber: number) => void;
   onLoadDayRecordToSheet: (record: DayRecord) => void;
@@ -25,6 +27,8 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
   selectedMonth,
   dailyEntries,
   currentDate,
+  manualHolidays = [],
+  onToggleHoliday,
   onDeleteDayRecord,
   onLoadDayRecordToSheet,
 }) => {
@@ -37,11 +41,14 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
 
   // Build the list of records:
-  // All user-logged days + ALL Sundays in the month even if not logged!
+  // All user-logged days + ALL Sundays and manual holidays in the month even if not logged!
   const allRecordsMap: Record<number, DayRecord> = { ...dailyEntries };
 
   for (let d = 1; d <= daysInMonth; d++) {
-    if (isSunday(d, selectedMonth, currentYear) && !allRecordsMap[d]) {
+    const isSun = isSunday(d, selectedMonth, currentYear);
+    const isManHol = manualHolidays.includes(d);
+
+    if ((isSun || isManHol) && !allRecordsMap[d]) {
       const dStr = d.toString().padStart(2, '0');
       allRecordsMap[d] = {
         dayNumber: d,
@@ -83,22 +90,10 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
     0
   );
 
-  const totalBillCount = (Object.values(dailyEntries) as DayRecord[]).reduce(
-    (acc: number, entry: DayRecord) => acc + (entry.billCount || 0),
-    0
-  );
-
-  const grandTotalBillIncentive = (Object.values(dailyEntries) as DayRecord[]).reduce(
-    (acc: number, entry: DayRecord) => acc + (entry.billIncentive || 0),
-    0
-  );
-
   const grandTotalEarlyIncentive = (Object.values(dailyEntries) as DayRecord[]).reduce(
     (acc: number, entry: DayRecord) => acc + (entry.earlyIncentive || 0),
     0
   );
-
-  const grandTotalIncentive = grandTotalEarlyIncentive + grandTotalBillIncentive;
 
   return (
     <aside className="w-full bg-white border border-neutral-200/90 rounded-2xl p-3 sm:p-4 shadow-xs flex flex-col h-full min-h-0 overflow-hidden">
@@ -180,22 +175,22 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
             </span>
           </div>
 
-          {/* 3. Bill Incentive Total */}
-          <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs">
+          {/* 3. Logged Days / Attendance */}
+          <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs">
             <div className="flex items-center justify-between gap-1">
-              <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-indigo-900 truncate">
-                Bill Inc Total
+              <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-blue-900 truncate">
+                Logged Days
               </span>
-              <span className="text-[8px] font-bold uppercase tracking-tight text-indigo-700 bg-indigo-100/70 px-1 py-0.2 rounded shrink-0">
-                {totalBillCount} bills
+              <span className="text-[8px] font-bold uppercase tracking-tight text-blue-700 bg-blue-100/70 px-1 py-0.2 rounded shrink-0">
+                {selectedMonth}
               </span>
             </div>
             <div className="flex items-baseline justify-between mt-1">
-              <span className="font-mono font-extrabold text-xs sm:text-sm md:text-base text-indigo-950 tabular-nums">
-                ₹{grandTotalBillIncentive}
+              <span className="font-mono font-extrabold text-xs sm:text-sm md:text-base text-blue-950 tabular-nums">
+                {loggedCount} Days
               </span>
-              <span className="text-[9px] text-indigo-500 font-mono">
-                (@ ₹30)
+              <span className="text-[9px] text-blue-600 font-medium">
+                of {daysInMonth}
               </span>
             </div>
           </div>
@@ -253,8 +248,10 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
           <div className="space-y-2">
             {displayedDaysList.map((entry) => {
               const isSun = isSunday(entry.dayNumber, selectedMonth, currentYear);
+              const isManualHol = manualHolidays.includes(entry.dayNumber);
               const isSaved = !!dailyEntries[entry.dayNumber];
               const entryCalc = isSaved ? calculateTotalDuration(entry.sections) : null;
+              const dateDisplay = `${selectedMonth.toUpperCase()} ${entry.dayNumber}`;
 
               return (
                 <div
@@ -262,28 +259,24 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                   className={`p-2.5 border rounded-xl transition-all ${
                     isSun
                       ? 'bg-rose-50/30 hover:bg-rose-50/50 border-rose-200/70'
+                      : isManualHol
+                      ? 'bg-amber-50/30 hover:bg-amber-50/50 border-amber-200/70'
                       : 'bg-neutral-50/70 hover:bg-neutral-50 border-neutral-200/80'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <span
-                        className={`w-5 h-5 rounded-md font-mono text-[11px] font-bold flex items-center justify-center ${
-                          isSun ? 'bg-rose-600 text-white' : 'bg-neutral-900 text-white'
+                        className={`font-mono text-xs font-bold ${
+                          isSun
+                            ? 'text-rose-600'
+                            : isManualHol
+                            ? 'text-amber-600'
+                            : 'text-neutral-900'
                         }`}
                       >
-                        {entry.dayNumber}
+                        {dateDisplay}
                       </span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-semibold text-neutral-800">
-                          {entry.date}
-                        </span>
-                        {isSun && (
-                          <span className="px-1.5 py-0.5 bg-rose-100 text-rose-800 border border-rose-200 rounded text-[9px] font-bold tracking-tight uppercase">
-                            Sunday (Holiday)
-                          </span>
-                        )}
-                      </div>
                     </div>
 
                     <div className="flex items-center gap-1">
@@ -363,8 +356,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
             <table className="w-full text-xs text-left border-collapse">
               <thead>
                 <tr className="bg-neutral-50 text-neutral-600 font-semibold border-b border-neutral-200 uppercase tracking-wider text-[9px] sm:text-[10px]">
-                  <th className="px-1.5 sm:px-2 py-1.5 text-center w-8">Day</th>
-                  <th className="px-1.5 sm:px-2 py-1.5">Date</th>
+                  <th className="px-2 py-1.5 font-bold text-neutral-800">Date</th>
                   <th className="px-1.5 sm:px-2 py-1.5 text-center font-bold text-neutral-900">Total</th>
                   <th className="px-1.5 sm:px-2 py-1.5 text-center font-bold text-emerald-800">OT</th>
                   <th className="px-1 sm:px-1.5 py-1.5 text-center font-bold text-neutral-700">Inc</th>
@@ -374,8 +366,10 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
               <tbody className="divide-y divide-neutral-100">
                 {displayedDaysList.map((entry) => {
                   const isSun = isSunday(entry.dayNumber, selectedMonth, currentYear);
+                  const isManualHol = manualHolidays.includes(entry.dayNumber);
                   const isSaved = !!dailyEntries[entry.dayNumber];
                   const entryCalc = isSaved ? calculateTotalDuration(entry.sections) : null;
+                  const dateDisplay = `${selectedMonth.toUpperCase()} ${entry.dayNumber}`;
 
                   return (
                     <tr
@@ -383,27 +377,23 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                       className={`transition-colors ${
                         isSun
                           ? 'bg-rose-50/30 hover:bg-rose-50/55'
+                          : isManualHol
+                          ? 'bg-amber-50/30 hover:bg-amber-50/55'
                           : 'hover:bg-neutral-50/70'
                       }`}
                     >
-                      <td className="px-1.5 sm:px-2 py-1.5 text-center font-mono font-bold">
+                      <td className="px-2 py-1.5 whitespace-nowrap text-[11px]">
                         <span
-                          className={`inline-block px-1 rounded ${
-                            isSun ? 'text-rose-700 bg-rose-100/70' : 'text-neutral-900'
+                          className={`inline-block font-mono text-[11px] font-bold ${
+                            isSun
+                              ? 'text-rose-600'
+                              : isManualHol
+                              ? 'text-amber-600'
+                              : 'text-neutral-900'
                           }`}
                         >
-                          {entry.dayNumber}
+                          {dateDisplay}
                         </span>
-                      </td>
-                      <td className="px-1.5 sm:px-2 py-1.5 font-medium text-neutral-700 whitespace-nowrap text-[10px] sm:text-[11px]">
-                        <div className="inline-flex items-center gap-1.5">
-                          <span>{entry.date}</span>
-                          {isSun && (
-                            <span className="px-1 py-0.2 bg-rose-100 text-rose-800 border border-rose-200 rounded text-[9px] font-bold tracking-tight uppercase">
-                              Sun (Holiday)
-                            </span>
-                          )}
-                        </div>
                       </td>
                       <td className="px-1.5 sm:px-2 py-1.5 text-center font-mono font-bold text-neutral-900 tabular-nums text-[11px]">
                         {isSaved ? entry.totalDuration : '-'}
@@ -477,11 +467,11 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
             </span>
           </div>
 
-          {grandTotalBillIncentive > 0 && (
+          {grandTotalEarlyIncentive !== 0 && (
             <div className="flex items-center gap-1">
-              <span className="text-neutral-400 text-[9px] uppercase">Bills:</span>
-              <span className="text-indigo-800 font-bold">
-                ₹{grandTotalBillIncentive}
+              <span className="text-neutral-400 text-[9px] uppercase">Inc:</span>
+              <span className={grandTotalEarlyIncentive > 0 ? "text-emerald-800 font-bold" : "text-rose-800 font-bold"}>
+                {grandTotalEarlyIncentive > 0 ? `+₹${grandTotalEarlyIncentive}` : `-₹${Math.abs(grandTotalEarlyIncentive)}`}
               </span>
             </div>
           )}

@@ -8,7 +8,6 @@ interface SavedSuccessAnimationProps {
   totalFormatted?: string;
   otFormatted?: string;
   earlyIncentive?: number;
-  billIncentive?: number;
 }
 
 export const SavedSuccessAnimation: React.FC<SavedSuccessAnimationProps> = ({
@@ -18,7 +17,6 @@ export const SavedSuccessAnimation: React.FC<SavedSuccessAnimationProps> = ({
   totalFormatted,
   otFormatted,
   earlyIncentive,
-  billIncentive,
 }) => {
   useEffect(() => {
     if (!show) return;
@@ -39,11 +37,16 @@ export const SavedSuccessAnimation: React.FC<SavedSuccessAnimationProps> = ({
         className="bg-white rounded-2xl p-6 sm:p-7 shadow-2xl border border-neutral-100 flex flex-col items-center text-center max-w-xs w-full transform transition-all duration-300 scale-100 animate-in fade-in zoom-in-95"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ANIMATED CIRCLE WITH CHECKMARK */}
+        {/* ANIMATED LOGO WITH SUCCESS BADGE */}
         <div className="relative mb-3 flex items-center justify-center">
-          <div className="w-16 h-16 rounded-full bg-emerald-50 border-4 border-emerald-100 flex items-center justify-center">
-            <div className="w-12 h-12 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/30">
-              <Check className="w-6 h-6 stroke-[3]" />
+          <div className="w-16 h-16 rounded-2xl bg-white border-2 border-emerald-100 shadow-md p-2 flex items-center justify-center relative">
+            <img
+              src="/logo.png"
+              alt="Salary Calculator Logo"
+              className="w-full h-full object-contain"
+            />
+            <div className="absolute -bottom-1.5 -right-1.5 w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-md border-2 border-white">
+              <Check className="w-3.5 h-3.5 stroke-[3]" />
             </div>
           </div>
         </div>
@@ -99,19 +102,6 @@ export const SavedSuccessAnimation: React.FC<SavedSuccessAnimationProps> = ({
                     }`}
                   >
                     {earlyIncentive > 0 ? `+${earlyIncentive}` : `${earlyIncentive}`}
-                  </span>
-                </div>
-              </>
-            )}
-            {billIncentive !== undefined && billIncentive > 0 && (
-              <>
-                <span className="text-neutral-300 text-xs">|</span>
-                <div>
-                  <span className="block text-[9px] font-bold uppercase tracking-wider text-indigo-700">
-                    Bill Inc
-                  </span>
-                  <span className="font-mono font-bold text-xs text-indigo-800">
-                    +{billIncentive}
                   </span>
                 </div>
               </>

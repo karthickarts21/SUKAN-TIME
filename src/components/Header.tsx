@@ -2,11 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Calendar,
   ChevronDown,
-  Clock,
+  Cloud,
   FileSpreadsheet,
   FileText,
   RotateCcw,
+  Sliders,
+  User,
+  Wallet,
 } from 'lucide-react';
+import { User as FirebaseUser } from 'firebase/auth';
 import { MONTHS } from '../utils/storage';
 
 interface HeaderProps {
@@ -19,7 +23,12 @@ interface HeaderProps {
   onExportExcel: () => void;
   onExportPdf: () => void;
   onClearCurrentMonth: () => void;
+  onOpenSalarySettings?: () => void;
   lastSavedNotice?: string;
+  currentUser?: FirebaseUser | null;
+  onOpenAuth?: () => void;
+  isSyncing?: boolean;
+  syncStatus?: 'connected' | 'syncing' | 'offline' | 'error' | 'disconnected';
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -31,26 +40,30 @@ export const Header: React.FC<HeaderProps> = ({
   onExportExcel,
   onExportPdf,
   onClearCurrentMonth,
+  onOpenSalarySettings,
+  currentUser,
+  onOpenAuth,
+  isSyncing = false,
+  syncStatus = 'connected',
 }) => {
   const dateInputRef = useRef<HTMLInputElement>(null);
-  const reportRef = useRef<HTMLDivElement>(null);
-  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('[data-report-dropdown]')) {
-        setIsReportOpen(false);
+      if (!target.closest('[data-profile-dropdown]')) {
+        setIsProfileOpen(false);
       }
     };
-    if (isReportOpen) {
+    if (isProfileOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isReportOpen]);
+  }, [isProfileOpen]);
 
   // Format date for display: "2026-06-23" -> "23 JUN 2026"
   const formattedDateDisplay = (() => {
@@ -70,104 +83,186 @@ export const Header: React.FC<HeaderProps> = ({
     return date;
   })();
 
-  // Render Action Buttons (REPORT & CLEAR)
-  const renderActionButtons = (isMobile?: boolean) => (
-    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-      {/* REPORT DROPDOWN BUTTON (Pops open right next to button without overlay) */}
-      <div className="relative" data-report-dropdown="true">
-        <button
-          type="button"
-          onClick={() => setIsReportOpen(!isReportOpen)}
-          className="p-1.5 sm:px-3.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold uppercase tracking-wider rounded-lg transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
-          title={`Download ${selectedMonth} Report`}
-          aria-expanded={isReportOpen}
-        >
-          <FileText className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-          <span className="hidden sm:inline">REPORT</span>
-          <ChevronDown className="hidden sm:inline w-3 h-3 transition-transform" />
-        </button>
-
-        {isReportOpen && (
-          <div className="absolute right-0 top-full mt-1.5 w-60 bg-white border border-neutral-200/90 rounded-xl shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95">
-            <div className="px-2.5 py-1 mb-1 border-b border-neutral-100 flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">
-                Export {selectedMonth}
-              </span>
-              <span className="text-[9px] text-neutral-400 font-mono">Select</span>
-            </div>
-
-            {/* EXCEL OPTION */}
-            <button
-              type="button"
-              onClick={() => {
-                setIsReportOpen(false);
-                onExportExcel();
-              }}
-              className="w-full text-left px-2.5 py-2 hover:bg-emerald-50 rounded-lg transition-colors flex items-center gap-2.5 cursor-pointer group"
-            >
-              <div className="w-7 h-7 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                <FileSpreadsheet className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="block text-xs font-bold text-neutral-900 group-hover:text-emerald-950">
-                  Excel Spreadsheet
-                </span>
-                <span className="block text-[10px] text-neutral-500">.xlsx with session formulas</span>
-              </div>
-            </button>
-
-            {/* PDF OPTION */}
-            <button
-              type="button"
-              onClick={() => {
-                setIsReportOpen(false);
-                onExportPdf();
-              }}
-              className="w-full text-left px-2.5 py-2 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-2.5 cursor-pointer group mt-0.5"
-            >
-              <div className="w-7 h-7 rounded-md bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 group-hover:bg-rose-600 group-hover:text-white transition-colors">
-                <FileText className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="block text-xs font-bold text-neutral-900 group-hover:text-rose-950">
-                  PDF Document
-                </span>
-                <span className="block text-[10px] text-neutral-500">.pdf printable timesheet</span>
-              </div>
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* CLEAR MONTH BUTTON */}
+  // Render Top-Right Profile Icon Menu with Cloud Sync, Salary Settings, Report
+  const renderProfileMenu = () => (
+    <div className="relative shrink-0" data-profile-dropdown="true">
       <button
         type="button"
-        onClick={onClearCurrentMonth}
-        className="p-1.5 sm:px-3 sm:py-2 bg-white hover:bg-neutral-100 text-neutral-700 hover:text-neutral-900 border border-neutral-200 text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
-        title={`Clear ${selectedMonth} entries`}
+        onClick={() => setIsProfileOpen(!isProfileOpen)}
+        className="relative p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white transition-all shadow-xs flex items-center gap-2 cursor-pointer group"
+        title="Profile Menu (Cloud Sync, Salary Settings, Reports)"
+        aria-expanded={isProfileOpen}
       >
-        <RotateCcw className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-neutral-500" />
-        <span className="hidden sm:inline">CLEAR ({selectedMonth.slice(0, 3)})</span>
+        {/* User Avatar Circle */}
+        <div className="w-6 h-6 rounded-lg bg-neutral-800 text-emerald-400 border border-neutral-700 flex items-center justify-center text-xs font-bold font-mono">
+          {currentUser?.email ? currentUser.email[0].toUpperCase() : <User className="w-3.5 h-3.5" />}
+        </div>
+
+        {/* Username/Email label on desktop */}
+        <span className="hidden sm:inline text-xs font-bold tracking-tight text-neutral-200 group-hover:text-white max-w-[100px] truncate">
+          {currentUser?.email ? currentUser.email.split('@')[0] : 'Menu'}
+        </span>
+
+        <ChevronDown className="w-3 h-3 text-neutral-400 group-hover:text-white transition-transform" />
+
+        {/* Live sync status dot */}
+        <span
+          className={`w-2.5 h-2.5 rounded-full absolute -top-0.5 -right-0.5 border-2 border-white ${
+            syncStatus === 'error'
+              ? 'bg-rose-500'
+              : syncStatus === 'offline'
+              ? 'bg-neutral-400'
+              : syncStatus === 'syncing' || isSyncing
+              ? 'bg-amber-500 animate-ping'
+              : currentUser
+              ? 'bg-emerald-500'
+              : 'bg-neutral-400'
+          }`}
+          title={`Cloud: ${syncStatus.toUpperCase()}`}
+        />
       </button>
+
+      {/* DROPDOWN MENU */}
+      {isProfileOpen && (
+        <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-neutral-200/90 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95">
+          {/* USER INFO / CLOUD SYNC ITEM */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsProfileOpen(false);
+              onOpenAuth?.();
+            }}
+            className="w-full text-left p-2.5 rounded-xl hover:bg-neutral-50 transition-colors flex items-center gap-3 cursor-pointer group border-b border-neutral-100"
+          >
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              <Cloud className="w-4 h-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-neutral-900 group-hover:text-emerald-950">
+                  Cloud Sync
+                </span>
+                <span
+                  className={`text-[9px] font-bold px-1.5 py-0.2 rounded font-mono ${
+                    currentUser
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-neutral-100 text-neutral-600'
+                  }`}
+                >
+                  {currentUser ? 'Active' : 'Offline'}
+                </span>
+              </div>
+              <span className="block text-[11px] text-neutral-500 truncate">
+                {currentUser?.email || 'Sign in to sync across devices'}
+              </span>
+            </div>
+          </button>
+
+          {/* SALARY SETTINGS ITEM */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsProfileOpen(false);
+              onOpenSalarySettings?.();
+            }}
+            className="w-full text-left p-2.5 rounded-xl hover:bg-neutral-50 transition-colors flex items-center gap-3 cursor-pointer group mt-1"
+          >
+            <div className="w-8 h-8 rounded-lg bg-neutral-100 text-neutral-700 border border-neutral-200 flex items-center justify-center shrink-0 group-hover:bg-neutral-900 group-hover:text-white transition-colors">
+              <Wallet className="w-4 h-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="block text-xs font-bold text-neutral-900 group-hover:text-neutral-950">
+                Salary Settings
+              </span>
+              <span className="block text-[11px] text-neutral-500">
+                Basic Pay, Duty Hours & Deductions
+              </span>
+            </div>
+          </button>
+
+          {/* REPORTS SUBHEADER */}
+          <div className="px-2.5 pt-2 pb-1 mt-1 border-t border-neutral-100 flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+              Reports & Exports ({selectedMonth})
+            </span>
+          </div>
+
+          {/* EXCEL REPORT */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsProfileOpen(false);
+              onExportExcel();
+            }}
+            className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-emerald-50 transition-colors flex items-center gap-2.5 cursor-pointer group"
+          >
+            <div className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="block text-xs font-bold text-neutral-900 group-hover:text-emerald-950">
+                Excel Spreadsheet
+              </span>
+              <span className="block text-[10px] text-neutral-500">.xlsx timesheet with formulas</span>
+            </div>
+          </button>
+
+          {/* PDF REPORT */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsProfileOpen(false);
+              onExportPdf();
+            }}
+            className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-rose-50 transition-colors flex items-center gap-2.5 cursor-pointer group"
+          >
+            <div className="w-6 h-6 rounded-md bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 group-hover:bg-rose-600 group-hover:text-white transition-colors">
+              <FileText className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="block text-xs font-bold text-neutral-900 group-hover:text-rose-950">
+                PDF Document
+              </span>
+              <span className="block text-[10px] text-neutral-500">.pdf printable report</span>
+            </div>
+          </button>
+
+          {/* CLEAR MONTH (UTILITY) */}
+          <div className="pt-1 mt-1 border-t border-neutral-100">
+            <button
+              type="button"
+              onClick={() => {
+                setIsProfileOpen(false);
+                onClearCurrentMonth();
+              }}
+              className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-neutral-100 text-neutral-600 hover:text-rose-700 transition-colors flex items-center gap-2 cursor-pointer text-xs font-medium"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-neutral-400" />
+              <span>Clear {selectedMonth} Data</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 
   return (
     <header className="w-full pb-3 border-b border-neutral-200/90">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5 lg:gap-4">
-        {/* ROW 1: BRANDING + MOBILE ACTIONS */}
+        {/* ROW 1: BRANDING + MOBILE PROFILE ICON */}
         <div className="flex items-center justify-between gap-2 w-full lg:w-auto">
-          {/* BRANDING */}
+          {/* BRANDING: Salary Calculator with logo.png */}
           <div className="flex items-center gap-2 sm:gap-2.5">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-neutral-900 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="Salary Calculator Logo"
+              className="w-7 h-7 sm:w-8 sm:h-8 object-contain shrink-0 bg-transparent border-0 shadow-none outline-none"
+            />
             <div>
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <h1 className="text-base sm:text-2xl font-bold tracking-tight text-neutral-900 leading-tight">
-                  Time Calculator
+                  Salary Calculator
                 </h1>
-                {/* Only show Saved badge when saved, remove Not saved */}
                 {hasSavedData && (
                   <>
                     <span className="text-neutral-300">·</span>
@@ -181,9 +276,9 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* MOBILE ONLY: ACTION BUTTONS (REPORT & CLEAR) ON RIGHT OF BRANDING */}
+          {/* MOBILE ONLY: PROFILE MENU ON TOP RIGHT */}
           <div className="flex lg:hidden">
-            {renderActionButtons(true)}
+            {renderProfileMenu()}
           </div>
         </div>
 
@@ -191,30 +286,18 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full lg:w-auto">
           {/* DATE & MONTH IN A SINGLE LINE ON MOBILE (grid-cols-2) */}
           <div className="grid grid-cols-2 gap-2 w-full lg:w-auto lg:flex lg:items-center lg:gap-3">
-            {/* 1. DATE SELECTOR */}
-            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">
+            {/* 1. DATE TEXT DISPLAY */}
+            <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1.5 bg-neutral-50/80 border border-neutral-200/70 rounded-lg min-w-0">
+              <Calendar className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-400 shrink-0">
                 DATE:
               </span>
-              <div className="relative flex-1 flex items-center justify-between gap-1.5 px-2 sm:px-2.5 py-1.5 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 hover:border-neutral-300 rounded-lg cursor-pointer transition-colors shadow-2xs min-w-0">
-                <div className="flex items-center gap-1.5 min-w-0 overflow-hidden pointer-events-none">
-                  <Calendar className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
-                  <span className="text-xs font-semibold font-mono tracking-tight text-neutral-900 tabular-nums truncate">
-                    {formattedDateDisplay}
-                  </span>
-                </div>
-                <input
-                  ref={dateInputRef}
-                  type="date"
-                  value={date}
-                  onChange={(e) => onDateChange(e.target.value)}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  aria-label="Select Date"
-                />
-              </div>
+              <span className="text-xs font-bold font-mono tracking-tight text-neutral-900 tabular-nums truncate">
+                {formattedDateDisplay}
+              </span>
             </div>
 
-            {/* 2. MONTH SELECTOR (NO < & >, ONLY CLEAN DROPDOWN) */}
+            {/* 2. MONTH SELECTOR */}
             <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
               <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">
                 MONTH:
@@ -237,13 +320,14 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* DESKTOP ONLY: ACTION BUTTONS (REPORT & CLEAR) INLINE */}
+          {/* DESKTOP ONLY: PROFILE MENU ON TOP RIGHT */}
           <div className="hidden lg:flex">
-            {renderActionButtons(false)}
+            {renderProfileMenu()}
           </div>
         </div>
       </div>
     </header>
   );
 };
+
 
