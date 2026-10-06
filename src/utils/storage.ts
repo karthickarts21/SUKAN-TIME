@@ -93,27 +93,40 @@ export function loadStorage(): AppStorage {
       parsed.months = initial.months;
     }
 
-    // Always default selectedMonth to real-world current month on app load
-    const currentMonthName = getCurrentMonthName();
-    const todayDateStr = getLocalTodayDateString();
-    parsed.selectedMonth = currentMonthName;
-
-    // Ensure the current month date is defaulted to today's date
-    if (!parsed.months[currentMonthName]) {
-      parsed.months[currentMonthName] = createDefaultMonthData();
-    } else {
-      parsed.months[currentMonthName].date = todayDateStr;
-      const todayDay = new Date().getDate();
-      const todaySavedEntry = parsed.months[currentMonthName].dailyEntries?.[todayDay];
-      if (todaySavedEntry && todaySavedEntry.sections) {
-        parsed.months[currentMonthName].sections = todaySavedEntry.sections;
-      }
+    // Preserve the user's previously selected month if valid, otherwise fallback
+    if (!parsed.selectedMonth || !MONTHS.includes(parsed.selectedMonth as any)) {
+      parsed.selectedMonth = getCurrentMonthName();
     }
 
     MONTHS.forEach((m) => {
       if (!parsed.months[m]) {
         parsed.months[m] = createDefaultMonthData();
       } else {
+        // Preserve saved date! Only fallback to 1st of month or today if date string is completely missing
+        if (!parsed.months[m].date) {
+          const mIdx = MONTHS.indexOf(m as any);
+          const y = new Date().getFullYear();
+          const mStr = (mIdx + 1).toString().padStart(2, '0');
+          parsed.months[m].date = `${y}-${mStr}-01`;
+        }
+
+        // For the active date, load the saved daily record if present, otherwise fresh empty entries
+        const parts = parsed.months[m].date.split('-');
+        const activeDayNum = parseInt(parts[2] || '1', 10);
+        const savedEntry = parsed.months[m].dailyEntries?.[activeDayNum];
+
+        if (savedEntry && savedEntry.sections) {
+          parsed.months[m].sections = JSON.parse(JSON.stringify(savedEntry.sections));
+        } else {
+          // Fresh empty sessions for unlogged date
+          parsed.months[m].sections = [
+            createEmptyTimeEntry(0),
+            createEmptyTimeEntry(1),
+            createEmptyTimeEntry(2),
+            createEmptyTimeEntry(3),
+          ];
+        }
+
         // ensure sections array has 4 elements
         if (!parsed.months[m].sections || parsed.months[m].sections.length < 4) {
           const current = parsed.months[m].sections || [];

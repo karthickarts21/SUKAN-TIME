@@ -293,25 +293,49 @@ export function calculateMonthlySalary(
     (pf + esi + advance + halfDayDeduction + otherDeduction).toFixed(2)
   );
 
+  // Requirement:
+  // "Total Deduction la irukka money monthoda lost date la end time kudutha Net salary la irunthu (-) aaganum,
+  // athuvaraikkum Net salary la irunthu (- deduction aaga kudathu) only Month lost date Lost End Time Only.
+  // Same bank transfers-la month lost date end time update pannuna thaan "bank transfer" la money kattanum"
+  // Check if the month's last date (e.g. 31 for Oct, 30 for Nov) has an End Time entered/logged
+  const lastDayNumber = totalDays;
+  const lastDayRecord = dailyEntries[lastDayNumber] || dailyEntries[String(lastDayNumber)];
+  
+  const curDayNumber = parseInt(monthObj.date?.split('-')[2] || '0', 10);
+  const activeSections = curDayNumber === lastDayNumber ? monthObj.sections : undefined;
+
+  const hasLastDayEndTime = Boolean(
+    (lastDayRecord?.sections && lastDayRecord.sections.some(s => typeof s.endTime === 'string' && s.endTime.trim() !== '')) ||
+    (activeSections && activeSections.some(s => typeof s.endTime === 'string' && s.endTime.trim() !== ''))
+  );
+
+  // Deductions are only subtracted from Net Salary when the month's last date has an end time!
+  const appliedDeductions = hasLastDayEndTime ? totalDeductions : 0;
+
   // Net Salary
-  const netSalary = Number((totalEarnings - totalDeductions).toFixed(2));
+  const netSalary = Number(Math.max(0, totalEarnings - appliedDeductions).toFixed(2));
 
   // Bank Transfer & Cash in Hand Split:
-  // "ethukkunna Basic salary mattum Bank transfer pannuvanga, balace Cash in Hand tharuvanga"
+  // Bank transfer only shows money once month's last date has an end time updated!
   let bankTransfer = 0;
-  if (monthObj.salaryData?.bankTransferAmount !== undefined) {
-    bankTransfer = monthObj.salaryData.bankTransferAmount;
-  } else if (typeof settings.bankTransferAmount === 'number' && settings.bankTransferAmount > 0) {
-    bankTransfer = settings.bankTransferAmount;
-  } else {
-    // Default is Basic Salary (or earned basic salary), capped at netSalary
-    bankTransfer = earnedBasicSalary;
-  }
+  if (hasLastDayEndTime) {
+    if (monthObj.salaryData?.bankTransferAmount !== undefined) {
+      bankTransfer = monthObj.salaryData.bankTransferAmount;
+    } else if (typeof settings.bankTransferAmount === 'number' && settings.bankTransferAmount > 0) {
+      bankTransfer = settings.bankTransferAmount;
+    } else {
+      // Default is Basic Salary (or earned basic salary), capped at netSalary
+      bankTransfer = earnedBasicSalary;
+    }
 
-  // Ensure bankTransfer does not exceed netSalary if netSalary > 0
-  if (netSalary > 0 && bankTransfer > netSalary) {
-    bankTransfer = netSalary;
-  } else if (netSalary <= 0) {
+    // Ensure bankTransfer does not exceed netSalary if netSalary > 0
+    if (netSalary > 0 && bankTransfer > netSalary) {
+      bankTransfer = netSalary;
+    } else if (netSalary <= 0) {
+      bankTransfer = 0;
+    }
+  } else {
+    // Before month's last date end time, bank transfer does not show money
     bankTransfer = 0;
   }
 
@@ -369,6 +393,8 @@ export function calculateMonthlySalary(
     isOtherDeductionDefault,
     defaultOtherDeduction,
     totalDeductions,
+    hasLastDayEndTime,
+    appliedDeductions,
 
     // Final Net & Split
     netSalary,

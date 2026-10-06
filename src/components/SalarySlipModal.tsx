@@ -253,7 +253,9 @@ export const SalarySlipModal: React.FC<SalarySlipModalProps> = ({
                 NET PAYABLE SALARY
               </span>
               <span className="text-[10px] text-neutral-400 font-mono print:text-neutral-600">
-                (Total Earnings − Total Deductions)
+                {salaryCalc.hasLastDayEndTime
+                  ? '(Total Earnings − Total Deductions)'
+                  : `(Total Earnings — Deductions apply on Day ${salaryCalc.totalDays} End Time)`}
               </span>
             </div>
             <div className="text-right">

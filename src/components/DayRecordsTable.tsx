@@ -42,8 +42,20 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
 
   // Build the list of records:
   // All user-logged days + ALL Sundays and manual holidays in the month even if not logged!
-  const allRecordsMap: Record<number, DayRecord> = { ...dailyEntries };
+  const allRecordsMap: Record<number, DayRecord> = {};
 
+  // 1. Copy user-saved dailyEntries, guaranteeing dayNumber is a valid numeric key
+  Object.entries(dailyEntries || {}).forEach(([key, rec]: [string, DayRecord]) => {
+    const dNum = Number(rec?.dayNumber || key);
+    if (!isNaN(dNum)) {
+      allRecordsMap[dNum] = {
+        ...rec,
+        dayNumber: dNum,
+      };
+    }
+  });
+
+  // 2. Add unlogged Sundays and manual holidays
   for (let d = 1; d <= daysInMonth; d++) {
     const isSun = isSunday(d, selectedMonth, currentYear);
     const isManHol = manualHolidays.includes(d);
@@ -249,7 +261,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
             {displayedDaysList.map((entry) => {
               const isSun = isSunday(entry.dayNumber, selectedMonth, currentYear);
               const isManualHol = manualHolidays.includes(entry.dayNumber);
-              const isSaved = !!dailyEntries[entry.dayNumber];
+              const isSaved = !!(dailyEntries[entry.dayNumber] || dailyEntries[String(entry.dayNumber)]);
               const entryCalc = isSaved ? calculateTotalDuration(entry.sections) : null;
               const dateDisplay = `${selectedMonth.toUpperCase()} ${entry.dayNumber}`;
 
@@ -292,11 +304,15 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                       {isSaved && (
                         <button
                           type="button"
-                          onClick={() => onDeleteDayRecord(entry.dayNumber)}
-                          className="p-1 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteDayRecord(Number(entry.dayNumber));
+                          }}
+                          className="p-1.5 sm:p-1 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 active:bg-rose-100 rounded transition-colors cursor-pointer"
                           title="Delete day record"
+                          aria-label={`Delete record for day ${entry.dayNumber}`}
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                         </button>
                       )}
                     </div>
@@ -367,7 +383,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                 {displayedDaysList.map((entry) => {
                   const isSun = isSunday(entry.dayNumber, selectedMonth, currentYear);
                   const isManualHol = manualHolidays.includes(entry.dayNumber);
-                  const isSaved = !!dailyEntries[entry.dayNumber];
+                  const isSaved = !!(dailyEntries[entry.dayNumber] || dailyEntries[String(entry.dayNumber)]);
                   const entryCalc = isSaved ? calculateTotalDuration(entry.sections) : null;
                   const dateDisplay = `${selectedMonth.toUpperCase()} ${entry.dayNumber}`;
 
@@ -430,11 +446,15 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                           {isSaved && (
                             <button
                               type="button"
-                              onClick={() => onDeleteDayRecord(entry.dayNumber)}
-                              className="p-1 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteDayRecord(Number(entry.dayNumber));
+                              }}
+                              className="p-1.5 sm:p-1 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 active:bg-rose-100 rounded cursor-pointer transition-colors"
                               title="Delete record"
+                              aria-label={`Delete record for day ${entry.dayNumber}`}
                             >
-                              <Trash2 className="w-3 h-3" />
+                              <Trash2 className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                             </button>
                           )}
                         </div>

@@ -12,6 +12,8 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
+  deleteField,
   collection,
   getDocs,
   getDocFromServer,
@@ -124,6 +126,26 @@ export async function getUserSalarySettings(
 }
 
 /**
+ * Delete a specific day entry from Firestore map so it is permanently removed
+ */
+export async function deleteUserDayRecord(
+  userId: string,
+  monthName: string,
+  dayNumber: number
+): Promise<void> {
+  try {
+    const monthRef = doc(db, 'users', userId, 'months', monthName);
+    await updateDoc(monthRef, {
+      [`dailyEntries.${dayNumber}`]: deleteField(),
+      [`dailyEntries.${String(dayNumber)}`]: deleteField(),
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn(`Note on deleteUserDayRecord in Firestore:`, err);
+  }
+}
+
+/**
  * Save a single month's data to Firestore under /users/{userId}/months/{monthName}
  */
 export async function saveUserMonthData(
@@ -149,7 +171,8 @@ export async function saveUserMonthData(
       payload.lastSavedAt = monthData.lastSavedAt;
     }
 
-    await setDoc(monthRef, payload, { merge: true });
+    // Overwrite the month doc completely so deleted daily entries or cleared data are truly removed
+    await setDoc(monthRef, payload);
   } catch (err) {
     console.error(`Error saving month ${monthName} to Firestore:`, err);
     throw err;

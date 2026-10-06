@@ -294,14 +294,16 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
               <span className="font-mono font-extrabold text-base sm:text-lg lg:text-xl text-rose-950 tabular-nums">
                 ₹{salaryCalc.totalDeductions.toLocaleString()}
               </span>
-              <span className="block text-[10px] text-rose-700 font-medium">
-                PF + ESI + Adv + Half Days
+              <span className="block text-[10px] text-rose-700 font-medium truncate">
+                {salaryCalc.hasLastDayEndTime ? 'Deducted from Net Salary' : `Applies on Day ${salaryCalc.totalDays} End Time`}
               </span>
             </div>
           </div>
           <div className="mt-2 pt-1 border-t border-rose-200/60 flex items-center justify-between text-[10px] font-mono text-rose-700">
             <span>PF+ESI: ₹{(salaryCalc.pf + salaryCalc.esi).toLocaleString()}</span>
-            <span className="font-semibold text-rose-800">Total: ₹{salaryCalc.totalDeductions.toLocaleString()}</span>
+            <span className="font-semibold text-rose-800 truncate">
+              {salaryCalc.hasLastDayEndTime ? 'Applied (-)' : `Pending Day ${salaryCalc.totalDays}`}
+            </span>
           </div>
         </div>
 
@@ -313,15 +315,17 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
               NET SALARY
             </span>
             <span className="text-[9px] font-mono uppercase bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-bold border border-emerald-500/30">
-              PAYABLE
+              {salaryCalc.hasLastDayEndTime ? 'FINAL NET' : 'PAYABLE'}
             </span>
           </div>
           <div className="mt-1.5">
             <span className="font-mono font-black text-xl sm:text-2xl text-emerald-400 tabular-nums">
               ₹{salaryCalc.netSalary.toLocaleString()}
             </span>
-            <span className="block text-[10px] text-neutral-300 font-medium">
-              Total Earnings − Total Deductions
+            <span className="block text-[10px] text-neutral-300 font-medium truncate">
+              {salaryCalc.hasLastDayEndTime
+                ? 'Total Earnings − Total Deductions'
+                : `Earnings (Deductions on Day ${salaryCalc.totalDays} End Time)`}
             </span>
           </div>
 
@@ -332,6 +336,9 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
               <span className="text-sky-300 font-extrabold text-xs tabular-nums">
                 ₹{salaryCalc.bankTransferAmount.toLocaleString()}
               </span>
+              {!salaryCalc.hasLastDayEndTime && (
+                <span className="block text-[8px] text-neutral-400 truncate">Pending Day {salaryCalc.totalDays}</span>
+              )}
             </div>
             <div className="bg-neutral-800/90 px-2 py-1 rounded border border-neutral-700/60">
               <span className="text-emerald-300/80 block text-[8px] font-bold uppercase tracking-wider">💵 Cash in Hand</span>

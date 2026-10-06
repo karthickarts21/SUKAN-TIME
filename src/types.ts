@@ -108,6 +108,8 @@ export interface MonthSalaryCalculation {
   isOtherDeductionDefault: boolean;
   defaultOtherDeduction: number;
   totalDeductions: number;
+  hasLastDayEndTime?: boolean;
+  appliedDeductions?: number;
 
   // Final Net & Split
   netSalary: number;

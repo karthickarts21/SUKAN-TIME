@@ -7,11 +7,13 @@ import {
   FileText,
   RotateCcw,
   Sliders,
+  Smartphone,
   User,
   Wallet,
 } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { MONTHS } from '../utils/storage';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 
 interface HeaderProps {
   date: string;
@@ -48,6 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const dateInputRef = useRef<HTMLInputElement>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -179,6 +182,30 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
           </button>
+
+          {/* INSTALL BROTIME PWA ITEM */}
+          {isInstallable && !isInstalled && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsProfileOpen(false);
+                promptInstall();
+              }}
+              className="w-full text-left p-2.5 rounded-xl bg-amber-50/70 hover:bg-amber-100/80 text-amber-900 border border-amber-200/80 transition-colors flex items-center gap-3 cursor-pointer group mt-1"
+            >
+              <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                <Smartphone className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="block text-xs font-bold text-amber-950">
+                  Install BroTime App
+                </span>
+                <span className="block text-[10px] text-amber-700">
+                  Add to Home Screen (Standalone App)
+                </span>
+              </div>
+            </button>
+          )}
 
           {/* REPORTS SUBHEADER */}
           <div className="px-2.5 pt-2 pb-1 mt-1 border-t border-neutral-100 flex items-center justify-between">

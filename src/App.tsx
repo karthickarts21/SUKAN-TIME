@@ -8,6 +8,7 @@ import {
   getUserAllMonthsData,
   saveUserMonthData,
   saveAllUserMonthsData,
+  deleteUserDayRecord,
   subscribeToSalarySettings,
   subscribeToAllMonths,
 } from './services/firebase';
@@ -23,7 +24,7 @@ import { SavedSuccessAnimation } from './components/SavedSuccessAnimation';
 import { TimeSection } from './components/TimeSection';
 import { TotalSection } from './components/TotalSection';
 import { MobileBottomNav, MobileTab } from './components/MobileBottomNav';
-import { DayRecord, MonthData, MonthSalaryData, SalarySettings, TimeEntry } from './types';
+import { AllMonthsData, DayRecord, MonthData, MonthSalaryData, SalarySettings, TimeEntry } from './types';
 import {
   clearCurrentMonthData,
   createDefaultMonthData,
@@ -163,7 +164,16 @@ export default function App() {
 
           if (cloudMonths && Object.keys(cloudMonths).length > 0) {
             setAppState((prev) => {
-              const mergedMonths = { ...prev.months, ...cloudMonths };
+              const mergedMonths: AllMonthsData = { ...prev.months };
+              Object.entries(cloudMonths).forEach(([mName, remoteM]) => {
+                const localM = prev.months[mName];
+                mergedMonths[mName] = {
+                  ...remoteM,
+                  // Preserve user's current selected date across refresh
+                  date: localM?.date || remoteM.date,
+                  sections: localM?.sections || remoteM.sections,
+                };
+              });
               const nextState = { ...prev, months: mergedMonths };
               saveStorage(nextState);
               return nextState;
@@ -380,6 +390,7 @@ export default function App() {
     if (!newDateStr) return;
 
     let targetMonth = currentMonth;
+    let targetDayNum = 1;
     try {
       const parts = newDateStr.split('-');
       if (parts.length === 3) {
@@ -387,6 +398,7 @@ export default function App() {
         if (mIdx >= 0 && mIdx < MONTHS.length) {
           targetMonth = MONTHS[mIdx];
         }
+        targetDayNum = parseInt(parts[2], 10) || 1;
       }
     } catch {
       // keep currentMonth
@@ -399,6 +411,16 @@ export default function App() {
         dailyEntries: {},
       };
 
+      const existingRecord = existingTarget.dailyEntries?.[targetDayNum];
+      const sectionsToUse: [TimeEntry, TimeEntry, TimeEntry, TimeEntry] = existingRecord
+        ? JSON.parse(JSON.stringify(existingRecord.sections))
+        : [
+            createEmptyTimeEntry(0),
+            createEmptyTimeEntry(1),
+            createEmptyTimeEntry(2),
+            createEmptyTimeEntry(3),
+          ];
+
       const nextState = {
         ...prev,
         selectedMonth: targetMonth,
@@ -407,6 +429,7 @@ export default function App() {
           [targetMonth]: {
             ...existingTarget,
             date: newDateStr,
+            sections: sectionsToUse,
           },
         },
       };
@@ -414,6 +437,13 @@ export default function App() {
       saveStorage(nextState);
       return nextState;
     });
+
+    const targetDayRecord = appState.months[targetMonth]?.dailyEntries?.[targetDayNum];
+    if (targetDayRecord?.sections[3]?.startTime || targetDayRecord?.sections[3]?.endTime) {
+      setShowSection4(true);
+    } else {
+      setShowSection4(false);
+    }
   };
 
   // Change month from Dropdown or Prev/Next
@@ -494,9 +524,14 @@ export default function App() {
         dailyEntries: {},
       };
 
-      const sectionsToUse = existingDayRecord
+      const sectionsToUse: [TimeEntry, TimeEntry, TimeEntry, TimeEntry] = existingDayRecord
         ? JSON.parse(JSON.stringify(existingDayRecord.sections))
-        : currentM.sections;
+        : [
+            createEmptyTimeEntry(0),
+            createEmptyTimeEntry(1),
+            createEmptyTimeEntry(2),
+            createEmptyTimeEntry(3),
+          ];
 
       const nextState = {
         ...prev,
@@ -517,6 +552,8 @@ export default function App() {
 
     if (existingDayRecord?.sections[3]?.startTime || existingDayRecord?.sections[3]?.endTime) {
       setShowSection4(true);
+    } else {
+      setShowSection4(false);
     }
   };
 
@@ -777,20 +814,39 @@ export default function App() {
 
   // Delete day record with Yes / No confirmation dialog
   const handleDeleteDayRecord = (dayNumber: number) => {
+    const num = Number(dayNumber);
     setConfirmModal({
       isOpen: true,
-      title: `Delete Day ${dayNumber} Log?`,
-      message: `Are you sure you want to delete the time log for ${currentMonth} Day ${dayNumber}? This will remove the recorded hours and overtime for this day.`,
+      title: `Delete Day ${num} Log?`,
+      message: `Are you sure you want to delete the time log for ${currentMonth} Day ${num}? This will remove the recorded hours and overtime for this day.`,
       confirmLabel: `Yes, Delete`,
       isDanger: true,
       onConfirm: () => {
         setAppState((prev) => {
           const curMonth = prev.months[currentMonth];
-          const updatedEntries = { ...curMonth.dailyEntries };
+          if (!curMonth) return prev;
+
+          const updatedEntries = { ...(curMonth.dailyEntries || {}) };
+          delete updatedEntries[num];
           delete updatedEntries[dayNumber];
+          delete updatedEntries[String(dayNumber)];
+          delete updatedEntries[String(num)];
+
+          // If currently active day in editor is this day, reset editor sessions so old times don't linger
+          const curDayNum = parseInt(curMonth.date.split('-')[2] || '1', 10);
+          let activeSections = curMonth.sections;
+          if (curDayNum === num) {
+            activeSections = [
+              createEmptyTimeEntry(0),
+              createEmptyTimeEntry(1),
+              createEmptyTimeEntry(2),
+              createEmptyTimeEntry(3),
+            ];
+          }
 
           const updatedMonth: MonthData = {
             ...curMonth,
+            sections: activeSections,
             dailyEntries: updatedEntries,
           };
 
@@ -802,17 +858,21 @@ export default function App() {
             },
           };
           saveStorage(nextState);
+
           const activeUid = auth.currentUser?.uid || currentUser?.uid;
           if (activeUid) {
+            deleteUserDayRecord(activeUid, currentMonth, num).catch((e) =>
+              console.error('Firestore deleteUserDayRecord error:', e)
+            );
             saveUserMonthData(activeUid, currentMonth, updatedMonth).catch((e) =>
-              console.error('Firestore delete day record error:', e)
+              console.error('Firestore delete day record saveUserMonthData error:', e)
             );
           }
           return nextState;
         });
 
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-        setLastSavedNotice(`Deleted Day ${dayNumber} record`);
+        setLastSavedNotice(`Deleted Day ${num} record`);
         setTimeout(() => setLastSavedNotice(''), 3000);
       },
     });
