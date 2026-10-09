@@ -1,6 +1,6 @@
 {
-  "name": "Time Calculator",
-  "description": "A clean, minimalist desktop-first month-wise time sheet and duration calculator application.",
+  "name": "Salary Calculator",
+  "description": "A clean, minimalist desktop-first month-wise time sheet and salary calculator application.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

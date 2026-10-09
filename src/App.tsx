@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import {
   auth,
@@ -40,12 +40,13 @@ import {
   calculateBillIncentive,
   calculateEarlyIncentive,
   calculateTotalDuration,
+  EarlyIncentiveResult,
 } from './utils/timeCalculator';
 import { DEFAULT_SALARY_SETTINGS, loadSalarySettings, saveSalarySettings } from './utils/salaryCalculator';
 import { exportMonthExcelReport } from './utils/excelExporter';
 import { exportMonthPdfReport } from './utils/pdfExporter';
 import { getYearFromDate, isSunday } from './utils/dateUtils';
-import { CalendarDays, Palmtree, Plus, X } from 'lucide-react';
+import { CalendarDays, Palmtree, Plus, UserX, X } from 'lucide-react';
 
 export default function App() {
   const [appState, setAppState] = useState(() => loadStorage());
@@ -233,6 +234,8 @@ export default function App() {
               const remoteDailyEntriesJson = JSON.stringify(remoteMonthData.dailyEntries || {});
               const localHolidaysJson = JSON.stringify(currentLocalMonth.manualHolidays || []);
               const remoteHolidaysJson = JSON.stringify(remoteMonthData.manualHolidays || []);
+              const localLeavesJson = JSON.stringify(currentLocalMonth.manualLeaves || []);
+              const remoteLeavesJson = JSON.stringify(remoteMonthData.manualLeaves || []);
               const localSalaryDataJson = JSON.stringify(currentLocalMonth.salaryData || {});
               const remoteSalaryDataJson = JSON.stringify(remoteMonthData.salaryData || {});
               const localBillCount = currentLocalMonth.billCount;
@@ -241,6 +244,7 @@ export default function App() {
               if (
                 localDailyEntriesJson === remoteDailyEntriesJson &&
                 localHolidaysJson === remoteHolidaysJson &&
+                localLeavesJson === remoteLeavesJson &&
                 localSalaryDataJson === remoteSalaryDataJson &&
                 localBillCount === remoteBillCount
               ) {
@@ -265,6 +269,7 @@ export default function App() {
                 sections: activeSections,
                 dailyEntries: remoteMonthData.dailyEntries || {},
                 manualHolidays: remoteMonthData.manualHolidays || [],
+                manualLeaves: remoteMonthData.manualLeaves || [],
                 billCount: remoteMonthData.billCount,
                 salaryData: remoteMonthData.salaryData,
                 lastSavedAt: remoteMonthData.lastSavedAt || currentLocalMonth.lastSavedAt,
@@ -348,8 +353,51 @@ export default function App() {
   const currentYear = getYearFromDate(monthData.date);
   const isCurrentSunday = isSunday(currentDayNumber, currentMonth, currentYear);
   const isCurrentManualHoliday = (monthData.manualHolidays || []).includes(currentDayNumber);
+  const isCurrentManualLeave = (monthData.manualLeaves || []).includes(currentDayNumber);
 
   const hasSavedDataForCurrentDay = !!monthData.dailyEntries?.[currentDayNumber];
+
+  // Dynamically synchronize the height of the right "Monthly Daily Logs" container with the left "Daily Work Sessions" container on desktop
+  const leftColRef = useRef<HTMLDivElement>(null);
+  const [leftColHeight, setLeftColHeight] = useState<number | undefined>(undefined);
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      if (leftColRef.current && window.innerWidth >= 1280) {
+        const height = leftColRef.current.offsetHeight;
+        if (height > 0) {
+          setLeftColHeight(height);
+        }
+      } else {
+        setLeftColHeight(undefined);
+      }
+    };
+
+    measure();
+
+    if (!leftColRef.current) return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (window.innerWidth >= 1280) {
+          const h = Math.round(entry.borderBoxSize?.[0]?.blockSize ?? entry.target.getBoundingClientRect().height);
+          if (h > 0) {
+            setLeftColHeight(h);
+          }
+        } else {
+          setLeftColHeight(undefined);
+        }
+      }
+    });
+
+    ro.observe(leftColRef.current);
+    window.addEventListener('resize', measure);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [showSection4, isCurrentSunday, isCurrentManualHoliday, monthData.date, monthData.sections]);
 
   // Updates single section and auto-persists to localStorage
   const handleSectionChange = (sectionIndex: number, updated: TimeEntry) => {
@@ -592,12 +640,17 @@ export default function App() {
         dailyEntries: {},
       };
       const currentHolidays = Array.isArray(cur.manualHolidays) ? [...cur.manualHolidays] : [];
+      const currentLeaves = Array.isArray(cur.manualLeaves) ? [...cur.manualLeaves] : [];
       const idx = currentHolidays.indexOf(dayNumber);
       let updatedHolidays: number[];
+      let updatedLeaves = currentLeaves;
+
       if (idx >= 0) {
         updatedHolidays = currentHolidays.filter((d) => d !== dayNumber);
       } else {
         updatedHolidays = [...currentHolidays, dayNumber].sort((a, b) => a - b);
+        // Remove from manualLeaves if it was marked as leave
+        updatedLeaves = currentLeaves.filter((d) => d !== dayNumber);
       }
 
       // Also update isHoliday on dailyEntries if record exists
@@ -606,12 +659,14 @@ export default function App() {
         updatedDailyEntries[dayNumber] = {
           ...updatedDailyEntries[dayNumber],
           isHoliday: idx < 0,
+          isLeave: false,
         };
       }
 
       const updatedMonth: MonthData = {
         ...cur,
         manualHolidays: updatedHolidays,
+        manualLeaves: updatedLeaves,
         dailyEntries: updatedDailyEntries,
       };
 
@@ -634,6 +689,64 @@ export default function App() {
     });
   };
 
+  // Handle manual Unpaid Leave toggle for Day Selector
+  const handleToggleLeave = (dayNumber: number) => {
+    setAppState((prev) => {
+      const cur = prev.months[currentMonth] || {
+        date: monthData.date,
+        sections: monthData.sections,
+        dailyEntries: {},
+      };
+      const currentLeaves = Array.isArray(cur.manualLeaves) ? [...cur.manualLeaves] : [];
+      const currentHolidays = Array.isArray(cur.manualHolidays) ? [...cur.manualHolidays] : [];
+      const idx = currentLeaves.indexOf(dayNumber);
+      let updatedLeaves: number[];
+      let updatedHolidays = currentHolidays;
+
+      if (idx >= 0) {
+        updatedLeaves = currentLeaves.filter((d) => d !== dayNumber);
+      } else {
+        updatedLeaves = [...currentLeaves, dayNumber].sort((a, b) => a - b);
+        // Remove from manualHolidays if it was marked as holiday
+        updatedHolidays = currentHolidays.filter((d) => d !== dayNumber);
+      }
+
+      // Also update isLeave on dailyEntries if record exists
+      const updatedDailyEntries = { ...(cur.dailyEntries || {}) };
+      if (updatedDailyEntries[dayNumber]) {
+        updatedDailyEntries[dayNumber] = {
+          ...updatedDailyEntries[dayNumber],
+          isLeave: idx < 0,
+          isHoliday: false,
+        };
+      }
+
+      const updatedMonth: MonthData = {
+        ...cur,
+        manualLeaves: updatedLeaves,
+        manualHolidays: updatedHolidays,
+        dailyEntries: updatedDailyEntries,
+      };
+
+      const nextState = {
+        ...prev,
+        months: {
+          ...prev.months,
+          [currentMonth]: updatedMonth,
+        },
+      };
+
+      saveStorage(nextState);
+      const activeUid = auth.currentUser?.uid || currentUser?.uid;
+      if (activeUid) {
+        saveUserMonthData(activeUid, currentMonth, updatedMonth).catch((e) =>
+          console.error('Firestore save leave error:', e)
+        );
+      }
+      return nextState;
+    });
+  };
+
   // Explicit Save Handler: saves current day and automatically moves to the next day
   const handleExplicitSave = () => {
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -642,18 +755,22 @@ export default function App() {
 
     const isSun = isSunday(currentDayNumber, currentMonth, currentYear);
     const isManHol = (monthData.manualHolidays || []).includes(currentDayNumber);
+    const isManLeave = (monthData.manualLeaves || []).includes(currentDayNumber);
+    const isOffDay = isSun || isManHol;
 
-    // Requirement: Bill Incentive "date" la add aaga kudathu "ore month" mattum thaa add aaganum
+    // Requirement:
+    // "Holiday or Sunday kku 'Early Incentive & OT Incentive' kidaiyathu, Ethavathu any Start & End Time irunthaley 1 day salary (Leave + Holiday Incentive) add aaganum"
     const newDayRecord: DayRecord = {
       date: `${currentMonth} Date ${currentDayNumber}`,
       dayNumber: currentDayNumber,
       sections: JSON.parse(JSON.stringify(monthData.sections)),
       durations: calcResult.durations,
       totalDuration: calcResult.totalFormatted,
-      otDuration: calcResult.otFormatted,
+      otDuration: isOffDay ? '00 H 00 M' : calcResult.otFormatted,
       savedAt: timeStr,
-      earlyIncentive: incentiveResult.amount,
-      isHoliday: isSun || isManHol,
+      earlyIncentive: isOffDay ? 0 : incentiveResult.amount,
+      isHoliday: isOffDay,
+      isLeave: isManLeave,
     };
 
     // Calculate next day number (advances to next day 1-31)
@@ -928,6 +1045,7 @@ export default function App() {
       const updatedMonth: MonthData = {
         ...curMonthObj,
         salaryData: updatedSalaryData,
+        billCount: updatedSalaryData.billCount,
       };
       const nextState = {
         ...prev,
@@ -947,9 +1065,30 @@ export default function App() {
     });
   };
 
+  const isCurrentOffDay = isCurrentSunday || isCurrentManualHoliday;
+
   // Calculate total duration & early incentive for current active month sections
-  const totalCalculation = calculateTotalDuration(monthData.sections);
-  const earlyIncentiveCalculation = calculateEarlyIncentive(monthData.sections);
+  const rawTotalCalc = calculateTotalDuration(monthData.sections);
+  const rawEarlyInc = calculateEarlyIncentive(monthData.sections);
+
+  // Requirement:
+  // "Holiday or Sunday kku 'Early Incentive & OT Incentive' kidaiyathu, Ethavathu any Start & End Time irunthaley 1 day salary (Leave + Holiday Incentive) add aaganum"
+  const totalCalculation = {
+    ...rawTotalCalc,
+    otFormatted: isCurrentOffDay ? '00 H 00 M' : rawTotalCalc.otFormatted,
+    otMinutes: isCurrentOffDay ? 0 : rawTotalCalc.otMinutes,
+  };
+
+  const earlyIncentiveCalculation: EarlyIncentiveResult = isCurrentOffDay
+    ? {
+        amount: 0,
+        formatted: '0',
+        reason: isCurrentSunday
+          ? 'Sunday (Holiday — No OT / Early Incentive)'
+          : 'Holiday (No OT / Early Incentive)',
+        hasEntries: rawEarlyInc.hasEntries,
+      }
+    : rawEarlyInc;
 
   return (
     <div className="min-h-screen bg-[#F6F7F9] p-2 sm:p-2.5 xl:p-3 pb-20 xl:pb-3 flex flex-col w-full">
@@ -973,9 +1112,10 @@ export default function App() {
         />
 
         {/* 3. MAIN WORKSPACE: RESPONSIVE TO MOBILE TABS (< xl) & TWO-COLUMN DESKTOP (xl+) */}
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-3.5 items-stretch">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-3.5 items-start">
           {/* LEFT COLUMN: Date Selector, Compact Sessions, Total Time (Visible on Desktop OR Home Tab on Mobile) */}
           <div
+            ref={leftColRef}
             className={`${
               mobileTab === 'home' ? 'flex' : 'hidden'
             } xl:flex xl:col-span-8 2xl:col-span-8 flex-col justify-start space-y-2 sm:space-y-2.5`}
@@ -986,8 +1126,10 @@ export default function App() {
               selectedMonth={currentMonth}
               dailyEntries={monthData.dailyEntries || {}}
               manualHolidays={monthData.manualHolidays || []}
+              manualLeaves={monthData.manualLeaves || []}
               onSelectDayNumber={handleSelectDayNumber}
               onToggleHoliday={handleToggleHoliday}
+              onToggleLeave={handleToggleLeave}
             />
 
             {/* SESSIONS SECTION */}
@@ -997,12 +1139,12 @@ export default function App() {
                   <span className="text-xs font-bold uppercase tracking-wider text-neutral-600 block">
                     Daily Work Sessions
                   </span>
-                  {/* HOLIDAY BADGE BELOW DAILY WORK SESSIONS TEXT */}
+                  {/* HOLIDAY & LEAVE BADGES BELOW DAILY WORK SESSIONS TEXT */}
                   {isCurrentSunday && (
                     <div className="mt-1">
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
                         <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                        Sunday — Holiday
+                        Sunday — Holiday (No OT / Early Incentive)
                       </span>
                     </div>
                   )}
@@ -1011,6 +1153,14 @@ export default function App() {
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-md">
                         <Palmtree className="w-3 h-3 text-amber-600" />
                         Holiday (Off Day — Not Deducted)
+                      </span>
+                    </div>
+                  )}
+                  {isCurrentManualLeave && !isCurrentSunday && !isCurrentManualHoliday && (
+                    <div className="mt-1">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-800 bg-rose-50 border border-rose-300 px-2 py-0.5 rounded-md">
+                        <UserX className="w-3 h-3 text-rose-600" />
+                        Unpaid Leave (1 Day Deducted)
                       </span>
                     </div>
                   )}
@@ -1108,7 +1258,10 @@ export default function App() {
           <div
             className={`${
               mobileTab === 'monthLog' ? 'flex' : 'hidden'
-            } xl:flex xl:col-span-4 2xl:col-span-4 flex-col h-full min-h-[420px]`}
+            } xl:flex xl:col-span-4 2xl:col-span-4 flex-col min-h-[420px] xl:min-h-0`}
+            style={{
+              height: leftColHeight ? `${leftColHeight}px` : undefined,
+            }}
           >
             <DayRecordsTable
               selectedMonth={currentMonth}
@@ -1125,7 +1278,7 @@ export default function App() {
         </div>
 
         {/* 4. MONTHLY SALARY SUMMARY & MANAGEMENT SECTION (Visible on Desktop OR Salary Tab on Mobile) */}
-        <div className={`${mobileTab === 'salary' ? 'block' : 'hidden'} xl:block`}>
+        <div className={`${mobileTab === 'salary' ? 'block' : 'hidden'} xl:block mt-0 xl:mt-4`}>
           <MonthlySalarySection
             selectedMonth={currentMonth}
             monthData={monthData}

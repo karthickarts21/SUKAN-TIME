@@ -16,6 +16,7 @@ export interface DayRecord {
   otDuration?: string;
   savedAt: string;
   isHoliday?: boolean;
+  isLeave?: boolean;
   earlyIncentive?: number;
   billCount?: number;
   billIncentive?: number;
@@ -40,6 +41,7 @@ export interface MonthData {
   billCount?: number;
   salaryData?: MonthSalaryData;
   manualHolidays?: number[]; // [e.g. 15, 26] days manually marked as Holiday
+  manualLeaves?: number[];   // [e.g. 5, 12] days manually marked as Unpaid Leave
 }
 
 export type AllMonthsData = Record<string, MonthData>;
@@ -89,6 +91,10 @@ export interface MonthSalaryCalculation {
   autoBillCount: number;
   isBillIncentiveAuto: boolean;
   leaveIncentive: number;
+  leaveHolidayIncentive?: number;
+  leaveBonusDays?: number;
+  deductedLeaveDays?: number;
+  totalLeaveHolidayDays?: number;
   isLeaveIncentiveEligible: boolean;
   otIncentive: number;
   totalEarnings: number;

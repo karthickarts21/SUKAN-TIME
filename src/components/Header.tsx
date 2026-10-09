@@ -98,12 +98,12 @@ export const Header: React.FC<HeaderProps> = ({
       >
         {/* User Avatar Circle */}
         <div className="w-6 h-6 rounded-lg bg-neutral-800 text-emerald-400 border border-neutral-700 flex items-center justify-center text-xs font-bold font-mono">
-          {currentUser?.email ? currentUser.email[0].toUpperCase() : <User className="w-3.5 h-3.5" />}
+          {currentUser?.email ? currentUser.email[0].toUpperCase() : <User className="w-3.5 h-3.5 text-emerald-400" />}
         </div>
 
         {/* Username/Email label on desktop */}
-        <span className="hidden sm:inline text-xs font-bold tracking-tight text-neutral-200 group-hover:text-white max-w-[100px] truncate">
-          {currentUser?.email ? currentUser.email.split('@')[0] : 'Menu'}
+        <span className="hidden sm:inline text-xs font-bold tracking-tight text-neutral-200 group-hover:text-white max-w-[130px] truncate">
+          {currentUser?.email ? currentUser.email.split('@')[0] : 'Menu & Sync'}
         </span>
 
         <ChevronDown className="w-3 h-3 text-neutral-400 group-hover:text-white transition-transform" />
@@ -135,28 +135,34 @@ export const Header: React.FC<HeaderProps> = ({
               setIsProfileOpen(false);
               onOpenAuth?.();
             }}
-            className="w-full text-left p-2.5 rounded-xl hover:bg-neutral-50 transition-colors flex items-center gap-3 cursor-pointer group border-b border-neutral-100"
+            className={`w-full text-left p-2.5 rounded-xl transition-colors flex items-center gap-3 cursor-pointer group border-b border-neutral-100 ${
+              !currentUser ? 'bg-emerald-50/70 hover:bg-emerald-100/80 border-emerald-200/60' : 'hover:bg-neutral-50'
+            }`}
           >
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+              currentUser
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 group-hover:bg-emerald-600 group-hover:text-white'
+                : 'bg-emerald-600 text-white shadow-xs'
+            }`}>
               <Cloud className="w-4 h-4" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-neutral-900 group-hover:text-emerald-950">
-                  Cloud Sync
+                <span className={`text-xs font-bold ${!currentUser ? 'text-emerald-950 font-black' : 'text-neutral-900 group-hover:text-emerald-950'}`}>
+                  {currentUser ? 'Cloud Account' : 'Sign In / Sign Up'}
                 </span>
                 <span
                   className={`text-[9px] font-bold px-1.5 py-0.2 rounded font-mono ${
                     currentUser
                       ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-neutral-100 text-neutral-600'
+                      : 'bg-emerald-600 text-white'
                   }`}
                 >
-                  {currentUser ? 'Active' : 'Offline'}
+                  {currentUser ? 'Active' : 'Login'}
                 </span>
               </div>
               <span className="block text-[11px] text-neutral-500 truncate">
-                {currentUser?.email || 'Sign in to sync across devices'}
+                {currentUser?.email || 'Tap to sign in or create new account'}
               </span>
             </div>
           </button>
@@ -303,8 +309,19 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* MOBILE ONLY: PROFILE MENU ON TOP RIGHT */}
-          <div className="flex lg:hidden">
+          {/* MOBILE ONLY: PROFILE / AUTH CONTROLS ON TOP RIGHT */}
+          <div className="flex lg:hidden items-center gap-1.5">
+            {!currentUser && (
+              <button
+                type="button"
+                onClick={onOpenAuth}
+                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-[11px] shadow-2xs transition-all flex items-center gap-1 cursor-pointer border border-emerald-500 shrink-0"
+                title="Sign In or Sign Up"
+              >
+                <User className="w-3 h-3 text-white" />
+                <span>Sign Up</span>
+              </button>
+            )}
             {renderProfileMenu()}
           </div>
         </div>
@@ -347,8 +364,19 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* DESKTOP ONLY: PROFILE MENU ON TOP RIGHT */}
-          <div className="hidden lg:flex">
+          {/* DESKTOP ONLY: PROFILE / AUTH CONTROLS ON TOP RIGHT */}
+          <div className="hidden lg:flex items-center gap-2">
+            {!currentUser && (
+              <button
+                type="button"
+                onClick={onOpenAuth}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs tracking-wide shadow-xs hover:shadow-sm transition-all flex items-center gap-1.5 cursor-pointer border border-emerald-500 shrink-0"
+                title="Sign In or Sign Up"
+              >
+                <User className="w-3.5 h-3.5 text-white" />
+                <span>Sign In / Sign Up</span>
+              </button>
+            )}
             {renderProfileMenu()}
           </div>
         </div>

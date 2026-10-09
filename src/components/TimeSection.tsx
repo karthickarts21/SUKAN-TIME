@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Clock, RotateCcw } from 'lucide-react';
 import { Period, TimeEntry } from '../types';
 import { calculateDuration } from '../utils/timeCalculator';
@@ -27,6 +27,11 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
   title,
   subtitle,
 }) => {
+  const startTimeInputRef = useRef<HTMLInputElement>(null);
+  const startPeriodBtnRef = useRef<HTMLButtonElement>(null);
+  const endTimeInputRef = useRef<HTMLInputElement>(null);
+  const endPeriodBtnRef = useRef<HTMLButtonElement>(null);
+
   const duration = calculateDuration(entry);
   const meta = DEFAULT_METADATA[sectionIndex] || {
     title: `Session 0${sectionIndex + 1}`,
@@ -52,35 +57,6 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
   const handleEndPeriodToggle = () => {
     const nextPeriod: Period = entry.endPeriod === 'AM' ? 'PM' : 'AM';
     onChange({ ...entry, endPeriod: nextPeriod });
-  };
-
-  // Handle native time picker selection (e.g. from clicking the time selector logo)
-  const handleNativePickerChange = (val: string, field: 'startTime' | 'endTime') => {
-    if (!val) return;
-    const [hStr, mStr] = val.split(':');
-    let h = parseInt(hStr, 10);
-    const m = mStr || '00';
-    let period: Period = 'AM';
-    if (h >= 12) {
-      period = 'PM';
-      if (h > 12) h -= 12;
-    } else if (h === 0) {
-      h = 12;
-    }
-    const formattedTime = `${h.toString().padStart(2, '0')}:${m}`;
-    if (field === 'startTime') {
-      onChange({
-        ...entry,
-        startTime: formattedTime,
-        startPeriod: period,
-      });
-    } else {
-      onChange({
-        ...entry,
-        endTime: formattedTime,
-        endPeriod: period,
-      });
-    }
   };
 
   // Auto-format input like "930" -> "09:30" or "9" -> "09:00" on blur
@@ -160,32 +136,48 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
             <div className="flex items-center gap-1.5">
               <div className="relative flex-1 min-w-0 flex items-center">
                 <div
-                  className="absolute left-2.5 w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-800 transition-colors z-10"
-                  title="Select time"
+                  className="absolute left-2.5 w-4 h-4 flex items-center justify-center text-neutral-400 pointer-events-none z-10"
+                  aria-hidden="true"
                 >
-                  <Clock className="w-3.5 h-3.5 pointer-events-none" />
-                  <input
-                    type="time"
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    onChange={(e) => handleNativePickerChange(e.target.value, 'startTime')}
-                    aria-label="Select start time"
-                  />
+                  <Clock className="w-3.5 h-3.5" />
                 </div>
                 <input
+                  ref={startTimeInputRef}
                   type="text"
                   placeholder="09:00"
                   value={entry.startTime}
                   onChange={(e) => handleStartTimeChange(e.target.value)}
                   onBlur={(e) => autoFormatTimeOnBlur(e.target.value, 'startTime')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && !e.shiftKey) {
+                      e.preventDefault();
+                      startPeriodBtnRef.current?.focus();
+                    }
+                  }}
                   className="h-9 w-full bg-neutral-50/80 border border-neutral-200 hover:border-neutral-300 focus:bg-white focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 rounded-lg pl-8 pr-2.5 text-center font-mono text-sm font-semibold text-neutral-900 placeholder:text-neutral-400 tabular-nums transition-colors"
                   aria-label={`${displayTitle} Start Time`}
                 />
               </div>
               <button
+                ref={startPeriodBtnRef}
                 type="button"
+                tabIndex={0}
                 onClick={handleStartPeriodToggle}
-                className="h-9 w-12 rounded-lg font-mono font-bold text-xs tracking-wider uppercase transition-all bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-900 shadow-2xs cursor-pointer flex items-center justify-center shrink-0"
-                title="Click to toggle AM / PM"
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab' && !e.shiftKey) {
+                    e.preventDefault();
+                    endTimeInputRef.current?.focus();
+                  } else if (e.key === 'Tab' && e.shiftKey) {
+                    e.preventDefault();
+                    startTimeInputRef.current?.focus();
+                  } else if (e.key === ' ' || e.key === 'Enter' || e.key === 'a' || e.key === 'A' || e.key === 'p' || e.key === 'P') {
+                    e.preventDefault();
+                    handleStartPeriodToggle();
+                  }
+                }}
+                className="h-9 w-12 rounded-lg font-mono font-bold text-xs tracking-wider uppercase transition-all bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-900 shadow-2xs cursor-pointer flex items-center justify-center shrink-0 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1"
+                title="Click or press Space / Enter / A / P to toggle AM / PM"
+                aria-label={`${displayTitle} Start Period: ${entry.startPeriod}`}
               >
                 {entry.startPeriod}
               </button>
@@ -200,32 +192,48 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
             <div className="flex items-center gap-1.5">
               <div className="relative flex-1 min-w-0 flex items-center">
                 <div
-                  className="absolute left-2.5 w-4 h-4 flex items-center justify-center text-neutral-400 hover:text-neutral-800 transition-colors z-10"
-                  title="Select time"
+                  className="absolute left-2.5 w-4 h-4 flex items-center justify-center text-neutral-400 pointer-events-none z-10"
+                  aria-hidden="true"
                 >
-                  <Clock className="w-3.5 h-3.5 pointer-events-none" />
-                  <input
-                    type="time"
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    onChange={(e) => handleNativePickerChange(e.target.value, 'endTime')}
-                    aria-label="Select end time"
-                  />
+                  <Clock className="w-3.5 h-3.5" />
                 </div>
                 <input
+                  ref={endTimeInputRef}
                   type="text"
                   placeholder="01:00"
                   value={entry.endTime}
                   onChange={(e) => handleEndTimeChange(e.target.value)}
                   onBlur={(e) => autoFormatTimeOnBlur(e.target.value, 'endTime')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && !e.shiftKey) {
+                      e.preventDefault();
+                      endPeriodBtnRef.current?.focus();
+                    } else if (e.key === 'Tab' && e.shiftKey) {
+                      e.preventDefault();
+                      startPeriodBtnRef.current?.focus();
+                    }
+                  }}
                   className="h-9 w-full bg-neutral-50/80 border border-neutral-200 hover:border-neutral-300 focus:bg-white focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 rounded-lg pl-8 pr-2.5 text-center font-mono text-sm font-semibold text-neutral-900 placeholder:text-neutral-400 tabular-nums transition-colors"
                   aria-label={`${displayTitle} End Time`}
                 />
               </div>
               <button
+                ref={endPeriodBtnRef}
                 type="button"
+                tabIndex={0}
                 onClick={handleEndPeriodToggle}
-                className="h-9 w-12 rounded-lg font-mono font-bold text-xs tracking-wider uppercase transition-all bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-900 shadow-2xs cursor-pointer flex items-center justify-center shrink-0"
-                title="Click to toggle AM / PM"
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab' && e.shiftKey) {
+                    e.preventDefault();
+                    endTimeInputRef.current?.focus();
+                  } else if (e.key === ' ' || e.key === 'Enter' || e.key === 'a' || e.key === 'A' || e.key === 'p' || e.key === 'P') {
+                    e.preventDefault();
+                    handleEndPeriodToggle();
+                  }
+                }}
+                className="h-9 w-12 rounded-lg font-mono font-bold text-xs tracking-wider uppercase transition-all bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-900 shadow-2xs cursor-pointer flex items-center justify-center shrink-0 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1"
+                title="Click or press Space / Enter / A / P to toggle AM / PM"
+                aria-label={`${displayTitle} End Period: ${entry.endPeriod}`}
               >
                 {entry.endPeriod}
               </button>

@@ -40,7 +40,7 @@ const headerBorder: Partial<ExcelJS.Borders> = {
  */
 export async function exportMonthExcelReport(monthName: string, monthObj: MonthData): Promise<void> {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Time Calculator App';
+  workbook.creator = 'Salary Calculator App';
   workbook.created = new Date();
 
   const worksheet = workbook.addWorksheet(`${monthName} Report`, {
@@ -92,7 +92,7 @@ export async function exportMonthExcelReport(monthName: string, monthObj: MonthD
   // 1. Title Banner (Rows 1 & 2)
   worksheet.mergeCells('A1:Q1');
   const titleCell = worksheet.getCell('A1');
-  titleCell.value = `⏱ TIME CALCULATOR — MONTHLY REPORT (${monthName.toUpperCase()})`;
+  titleCell.value = `⏱ SALARY CALCULATOR — MONTHLY REPORT (${monthName.toUpperCase()})`;
   titleCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
   titleCell.fill = {
     type: 'pattern',
@@ -300,7 +300,7 @@ export async function exportMonthExcelReport(monthName: string, monthObj: MonthD
  */
 export async function exportOverallExcelReport(allMonthsData: AllMonthsData): Promise<void> {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Time Calculator App';
+  workbook.creator = 'Salary Calculator App';
   workbook.created = new Date();
 
   // --- SHEET 1: OVERALL ANNUAL SUMMARY ---
@@ -310,7 +310,7 @@ export async function exportOverallExcelReport(allMonthsData: AllMonthsData): Pr
 
   summarySheet.mergeCells('A1:E1');
   const title = summarySheet.getCell('A1');
-  title.value = '⏱ TIME CALCULATOR — ANNUAL SUMMARY (ALL 12 MONTHS)';
+  title.value = '⏱ SALARY CALCULATOR — ANNUAL SUMMARY (ALL 12 MONTHS)';
   title.font = { name: 'Arial', size: 15, bold: true, color: { argb: 'FFFFFFFF' } };
   title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
   title.alignment = { vertical: 'middle', horizontal: 'center' };

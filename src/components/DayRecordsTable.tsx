@@ -155,8 +155,8 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
           </div>
         </div>
 
-        {/* SUMMARY STATS CARDS (Grand Total, Total OT, Bill Incentive Total, Early Incentive) */}
-        <div className="grid grid-cols-2 gap-2">
+        {/* SUMMARY STATS CARDS (Grand Total, Total OT, Early Incentive) - In a single line (3 cols) */}
+        <div className="grid grid-cols-3 gap-2">
           {/* 1. Grand Total: Full time WITHOUT 8.5 hr deducted */}
           <div className="bg-neutral-50 border border-neutral-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs">
             <div className="flex items-center justify-between gap-1">
@@ -167,7 +167,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                 Full Time
               </span>
             </div>
-            <span className="font-mono font-extrabold text-xs sm:text-sm md:text-base text-neutral-900 tabular-nums mt-1">
+            <span className="font-mono font-extrabold text-xs sm:text-sm md:text-base text-neutral-900 tabular-nums mt-1 truncate">
               {formatTotalMinutes(grandTotalMinutes)}
             </span>
           </div>
@@ -182,32 +182,12 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                 -8.5h/day
               </span>
             </div>
-            <span className="font-mono font-extrabold text-xs sm:text-sm md:text-base text-emerald-900 tabular-nums mt-1">
+            <span className="font-mono font-extrabold text-xs sm:text-sm md:text-base text-emerald-900 tabular-nums mt-1 truncate">
               {formatTotalMinutes(grandTotalOtMinutes)}
             </span>
           </div>
 
-          {/* 3. Logged Days / Attendance */}
-          <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs">
-            <div className="flex items-center justify-between gap-1">
-              <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-blue-900 truncate">
-                Logged Days
-              </span>
-              <span className="text-[8px] font-bold uppercase tracking-tight text-blue-700 bg-blue-100/70 px-1 py-0.2 rounded shrink-0">
-                {selectedMonth}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between mt-1">
-              <span className="font-mono font-extrabold text-xs sm:text-sm md:text-base text-blue-950 tabular-nums">
-                {loggedCount} Days
-              </span>
-              <span className="text-[9px] text-blue-600 font-medium">
-                of {daysInMonth}
-              </span>
-            </div>
-          </div>
-
-          {/* 4. Early Incentive Total */}
+          {/* 3. Early Incentive Total */}
           <div
             className={`rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs border ${
               grandTotalEarlyIncentive > 0
@@ -226,7 +206,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
               </span>
             </div>
             <span
-              className={`font-mono font-extrabold text-xs sm:text-sm md:text-base tabular-nums mt-1 ${
+              className={`font-mono font-extrabold text-xs sm:text-sm md:text-base tabular-nums mt-1 truncate ${
                 grandTotalEarlyIncentive > 0
                   ? 'text-emerald-700'
                   : grandTotalEarlyIncentive < 0
@@ -296,7 +276,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                         type="button"
                         onClick={() => onLoadDayRecordToSheet(entry)}
                         className="px-2 py-0.5 bg-white hover:bg-neutral-200 text-neutral-800 rounded text-[10px] font-semibold transition-colors border border-neutral-200 flex items-center gap-1 cursor-pointer shadow-2xs"
-                        title="Load record into time calculator"
+                        title="Load record into salary calculator"
                       >
                         <Upload className="w-2.5 h-2.5" />
                         <span>Load</span>

@@ -202,59 +202,59 @@ export const SalarySettingsModal: React.FC<SalarySettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#F6F7F9] flex flex-col overflow-y-auto animate-in fade-in duration-200">
-      {/* TOP FULL SCREEN HEADER BAR */}
-      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-neutral-200/90 px-3 sm:px-8 py-2.5 sm:py-3 flex items-center justify-between shadow-2xs shrink-0">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            onClick={handleRequestClose}
-            className="p-1.5 sm:px-3 sm:py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs border border-neutral-200"
-            title="Back to Calculator"
-            aria-label="Back to Calculator"
-          >
-            <ArrowLeft className="w-5 h-5 sm:w-4 sm:h-4 text-neutral-700" />
-            <span className="hidden sm:inline">BACK</span>
-          </button>
-          <div className="flex items-center gap-2">
-            <h1 className="text-sm sm:text-base font-bold text-neutral-900 tracking-tight leading-none flex items-center gap-1.5">
-              <span>Salary Settings</span>
-              <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
-                {selectedMonth}
-              </span>
-            </h1>
+    <div className="fixed inset-0 z-50 bg-[#F6F7F9] sm:bg-neutral-900/60 sm:backdrop-blur-xs flex sm:items-center sm:justify-center overflow-y-auto sm:overflow-hidden sm:p-4 animate-in fade-in duration-200">
+      <div
+        className="w-full h-full sm:h-auto sm:max-h-[92vh] sm:max-w-4xl bg-white sm:border sm:border-neutral-200/90 sm:rounded-2xl sm:shadow-2xl flex flex-col overflow-hidden animate-in sm:zoom-in-95 duration-200"
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* TOP MODAL HEADER BAR */}
+        <header className="sticky top-0 z-20 bg-neutral-900 border-b border-neutral-800 px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between shadow-2xs shrink-0 text-white">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={handleRequestClose}
+              className="p-1.5 sm:hidden bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer border border-neutral-700"
+              title="Back to Calculator"
+              aria-label="Back to Calculator"
+            >
+              <ArrowLeft className="w-5 h-5 text-neutral-300" />
+            </button>
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex w-7 h-7 rounded-lg bg-neutral-800 text-emerald-400 items-center justify-center font-bold text-sm shadow-xs shrink-0 border border-neutral-700">
+                ₹
+              </div>
+              <h1 className="text-sm sm:text-base font-bold text-white tracking-tight leading-none flex items-center gap-1.5">
+                <span>Salary Settings</span>
+                <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
+                  {selectedMonth}
+                </span>
+              </h1>
+            </div>
           </div>
-        </div>
 
-        {/* TOP ACTIONS: HIDDEN ON MOBILE, VISIBLE ON DESKTOP */}
-        <div className="hidden sm:flex items-center gap-2">
-          {savedNotice && (
-            <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold flex items-center gap-1 animate-in fade-in">
-              <Check className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Saved</span>
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={handleSave}
-            className="px-3.5 sm:px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>SAVE SETTINGS</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleRequestClose}
-            className="p-1.5 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 rounded-xl transition-colors cursor-pointer"
-            title="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      </header>
+          {/* TOP ACTIONS: VISIBLE CLOSE BUTTON */}
+          <div className="flex items-center gap-2">
+            {savedNotice && (
+              <span className="px-2.5 py-1 bg-emerald-900/60 text-emerald-300 border border-emerald-700/60 rounded-lg text-xs font-semibold flex items-center gap-1 animate-in fade-in">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Saved</span>
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleRequestClose}
+              className="p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded-xl transition-colors cursor-pointer"
+              title="Close"
+              aria-label="Close Salary Settings"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </header>
 
-      {/* FULL SCREEN BODY CONTENT */}
-      <main className="flex-1 max-w-5xl mx-auto w-full p-4 sm:p-6 lg:p-8 space-y-6">
+        {/* MODAL BODY CONTENT - SCROLLABLE ON OVERFLOW */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 bg-[#F6F7F9]/50 sm:bg-neutral-50/30">
         {/* SECTION 1: SETTINGS FORM */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200/90 shadow-xs">
           {/* 1. BASIC SALARY */}
@@ -618,51 +618,206 @@ export const SalarySettingsModal: React.FC<SalarySettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* EARNINGS & DEDUCTIONS DETAILED TABLE */}
-              <div className="border border-neutral-200/90 rounded-xl overflow-hidden text-xs">
-                <table className="w-full text-left border-collapse">
+              {/* MOBILE ONLY: SALARY COMPONENTS IN CARD TYPE */}
+              <div className="sm:hidden space-y-2.5">
+                {/* 1. Basic Salary Card */}
+                <div className="p-3 bg-neutral-50/80 border border-neutral-200/90 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="min-w-0 flex-1">
+                    <span className="font-bold text-xs text-neutral-900 block">
+                      Basic Salary (Earned)
+                    </span>
+                    <span className="text-[10px] text-neutral-500 block mt-0.5">
+                      {salaryCalc.loggedDaysCount >= salaryCalc.workingDays
+                        ? `Full Month (${salaryCalc.workingDays} Days)`
+                        : `${salaryCalc.loggedDaysCount}d worked @ ₹${salaryCalc.perDaySalary}/day`}
+                    </span>
+                  </div>
+                  <span className="font-mono font-bold text-sm text-neutral-900 shrink-0 tabular-nums">
+                    ₹{salaryCalc.earnedBasicSalary.toLocaleString()}
+                  </span>
+                </div>
+
+                {/* 2. Overtime (OT) Pay Card */}
+                <div className="p-3 bg-emerald-50/30 border border-emerald-200/80 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="min-w-0 flex-1">
+                    <span className="font-bold text-xs text-emerald-950 block">
+                      Overtime (OT) Pay
+                    </span>
+                    <span className="text-[10px] text-emerald-700 block mt-0.5">
+                      {salaryCalc.totalOtFormatted} ({((salaryCalc.totalOtMinutes / 60)).toFixed(2)}h) @ ₹{salaryCalc.perHourRate}/hr
+                    </span>
+                  </div>
+                  <span className="font-mono font-bold text-sm text-emerald-800 shrink-0 tabular-nums">
+                    + ₹{salaryCalc.otIncentive.toLocaleString()}
+                  </span>
+                </div>
+
+                {/* 3. Early Incentive Card */}
+                {salaryCalc.earlyIncentive !== 0 && (
+                  <div className="p-3 bg-neutral-50/80 border border-neutral-200/90 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                    <div className="min-w-0 flex-1">
+                      <span className="font-bold text-xs text-neutral-900 block">
+                        Early Incentive
+                      </span>
+                      <span className="text-[10px] text-neutral-500 block mt-0.5">
+                        Manual Monthly Incentive
+                      </span>
+                    </div>
+                    <span
+                      className={`font-mono font-bold text-sm shrink-0 tabular-nums ${
+                        salaryCalc.earlyIncentive > 0 ? 'text-emerald-700' : 'text-rose-700'
+                      }`}
+                    >
+                      {salaryCalc.earlyIncentive > 0
+                        ? `+ ₹${salaryCalc.earlyIncentive}`
+                        : `- ₹${Math.abs(salaryCalc.earlyIncentive)}`}
+                    </span>
+                  </div>
+                )}
+
+                {/* 4. Bill Incentive Card */}
+                {salaryCalc.billIncentive > 0 && (
+                  <div className="p-3 bg-indigo-50/30 border border-indigo-200/80 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                    <div className="min-w-0 flex-1">
+                      <span className="font-bold text-xs text-indigo-950 block">
+                        Bill Incentive
+                      </span>
+                      <span className="text-[10px] text-indigo-700 block mt-0.5">
+                        {salaryCalc.billCount} bills × ₹30
+                      </span>
+                    </div>
+                    <span className="font-mono font-bold text-sm text-indigo-800 shrink-0 tabular-nums">
+                      + ₹{salaryCalc.billIncentive.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+
+                {/* 5. Leave + Holiday Incentive Card */}
+                {salaryCalc.leaveIncentive > 0 && (
+                  <div className="p-3 bg-emerald-50/30 border border-emerald-200/80 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                    <div className="min-w-0 flex-1">
+                      <span className="font-bold text-xs text-emerald-950 block">
+                        Leave + Holiday Incentive
+                      </span>
+                      <span className="text-[10px] text-emerald-700 block mt-0.5">
+                        Bonus ({salaryCalc.leaveBonusDays || 0}d) + Sunday/Holiday ({salaryCalc.holidayWorkedDays || 0}d) = {(salaryCalc.totalLeaveHolidayDays || 0)} Days
+                      </span>
+                    </div>
+                    <span className="font-mono font-bold text-sm text-emerald-800 shrink-0 tabular-nums">
+                      + ₹{salaryCalc.leaveIncentive.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+
+                {/* 6. Deductions Card */}
+                {salaryCalc.totalDeductions > 0 && (
+                  <div className="p-3 bg-rose-50/30 border border-rose-200/80 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                    <div className="min-w-0 flex-1">
+                      <span className="font-bold text-xs text-rose-950 block">
+                        Total Deductions
+                      </span>
+                      <span className="text-[10px] text-rose-700 block mt-0.5 truncate">
+                        PF ₹{salaryCalc.pf} · ESI ₹{salaryCalc.esi} · Adv ₹{salaryCalc.advance} · Leave Inc ₹{salaryCalc.otherDeduction}
+                      </span>
+                    </div>
+                    <span className="font-mono font-bold text-sm text-rose-800 shrink-0 tabular-nums">
+                      − ₹{salaryCalc.totalDeductions.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+
+                {/* 7. Net Payable Salary Prominent Card */}
+                <div className="p-3.5 bg-neutral-900 text-white rounded-xl shadow-xs border border-neutral-950">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">
+                        NET PAYABLE SALARY
+                      </span>
+                      <span className="text-[10px] text-neutral-400 block mt-0.5">
+                        Total Earnings − Total Deductions
+                      </span>
+                    </div>
+                    <span className="font-mono font-black text-xl text-emerald-400 tabular-nums">
+                      ₹{salaryCalc.netSalary.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 8. Payout Split: Bank Transfer & Cash in Hand Grid */}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 bg-sky-50 border border-sky-200 rounded-xl">
+                    <span className="font-bold text-[11px] text-sky-950 flex items-center gap-1">
+                      <Building className="w-3.5 h-3.5 text-sky-700 shrink-0" />
+                      <span>Bank Transfer</span>
+                    </span>
+                    <span className="block font-mono font-bold text-sm text-sky-900 mt-1 tabular-nums">
+                      ₹{salaryCalc.bankTransferAmount.toLocaleString()}
+                    </span>
+                    <span className="block text-[9px] text-sky-600 mt-0.5">
+                      Direct Account
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                    <span className="font-bold text-[11px] text-emerald-950 flex items-center gap-1">
+                      <Banknote className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                      <span>Cash in Hand</span>
+                    </span>
+                    <span className="block font-mono font-bold text-sm text-emerald-900 mt-1 tabular-nums">
+                      ₹{salaryCalc.cashInHandAmount.toLocaleString()}
+                    </span>
+                    <span className="block text-[9px] text-emerald-600 mt-0.5">
+                      Balance Cash
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* DESKTOP ONLY: EARNINGS & DEDUCTIONS DETAILED TABLE */}
+              <div className="hidden sm:block border border-neutral-200/90 rounded-xl overflow-x-auto text-xs">
+                <table className="w-full min-w-[500px] sm:min-w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-neutral-100 text-neutral-700 font-bold uppercase tracking-wider text-[10px] border-b border-neutral-200">
-                      <th className="p-2.5">Salary Component</th>
-                      <th className="p-2.5 text-center">Basis / Calculation</th>
-                      <th className="p-2.5 text-right">Amount</th>
+                      <th className="p-2 sm:p-2.5 whitespace-nowrap">Salary Component</th>
+                      <th className="p-2 sm:p-2.5 text-center whitespace-nowrap">Basis / Calculation</th>
+                      <th className="p-2 sm:p-2.5 text-right whitespace-nowrap">Amount</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-100 font-medium">
                     {/* Basic Pay Earned */}
                     <tr className="hover:bg-neutral-50/70">
-                      <td className="p-2.5">
-                        <span className="font-bold text-neutral-900 block">
+                      <td className="p-2 sm:p-2.5">
+                        <span className="font-bold text-neutral-900 block whitespace-nowrap">
                           Basic Salary (Earned)
                         </span>
-                        <span className="text-[10px] text-neutral-500">
+                        <span className="text-[10px] text-neutral-500 block whitespace-nowrap">
                           {salaryCalc.loggedDaysCount} days worked @ ₹{salaryCalc.perDaySalary}/day
                         </span>
                       </td>
-                      <td className="p-2.5 text-center font-mono text-neutral-600 text-[11px]">
+                      <td className="p-2 sm:p-2.5 text-center font-mono text-neutral-600 text-[11px] whitespace-nowrap">
                         {salaryCalc.loggedDaysCount >= salaryCalc.workingDays
                           ? `Full Month (${salaryCalc.workingDays} Days)`
                           : `${salaryCalc.loggedDaysCount}d × ₹${salaryCalc.perDaySalary}`}
                       </td>
-                      <td className="p-2.5 text-right font-mono font-bold text-neutral-900 tabular-nums">
+                      <td className="p-2 sm:p-2.5 text-right font-mono font-bold text-neutral-900 tabular-nums whitespace-nowrap">
                         ₹{salaryCalc.earnedBasicSalary.toLocaleString()}
                       </td>
                     </tr>
 
                     {/* Overtime (OT) Pay */}
                     <tr className="hover:bg-neutral-50/70 bg-emerald-50/20">
-                      <td className="p-2.5">
-                        <span className="font-bold text-emerald-900 block">
+                      <td className="p-2 sm:p-2.5">
+                        <span className="font-bold text-emerald-900 block whitespace-nowrap">
                           Overtime (OT) Pay
                         </span>
-                        <span className="text-[10px] text-emerald-700">
+                        <span className="text-[10px] text-emerald-700 block whitespace-nowrap">
                           Total OT: {salaryCalc.totalOtFormatted} ({((salaryCalc.totalOtMinutes / 60)).toFixed(2)} Hours)
                         </span>
                       </td>
-                      <td className="p-2.5 text-center font-mono text-emerald-800 text-[11px]">
+                      <td className="p-2 sm:p-2.5 text-center font-mono text-emerald-800 text-[11px] whitespace-nowrap">
                         {((salaryCalc.totalOtMinutes / 60)).toFixed(2)} hrs × ₹{salaryCalc.perHourRate}/hr
                       </td>
-                      <td className="p-2.5 text-right font-mono font-bold text-emerald-800 tabular-nums">
+                      <td className="p-2 sm:p-2.5 text-right font-mono font-bold text-emerald-800 tabular-nums whitespace-nowrap">
                         + ₹{salaryCalc.otIncentive.toLocaleString()}
                       </td>
                     </tr>
@@ -670,19 +825,19 @@ export const SalarySettingsModal: React.FC<SalarySettingsModalProps> = ({
                     {/* Early Incentive */}
                     {salaryCalc.earlyIncentive !== 0 && (
                       <tr className="hover:bg-neutral-50/70">
-                        <td className="p-2.5">
-                          <span className="font-bold text-neutral-900 block">
+                        <td className="p-2 sm:p-2.5">
+                          <span className="font-bold text-neutral-900 block whitespace-nowrap">
                             Early Incentive
                           </span>
-                          <span className="text-[10px] text-neutral-500">
+                          <span className="text-[10px] text-neutral-500 block whitespace-nowrap">
                             Manual Monthly Incentive
                           </span>
                         </td>
-                        <td className="p-2.5 text-center font-mono text-neutral-600 text-[11px]">
+                        <td className="p-2 sm:p-2.5 text-center font-mono text-neutral-600 text-[11px] whitespace-nowrap">
                           Monthly Total
                         </td>
                         <td
-                          className={`p-2.5 text-right font-mono font-bold tabular-nums ${
+                          className={`p-2 sm:p-2.5 text-right font-mono font-bold tabular-nums whitespace-nowrap ${
                             salaryCalc.earlyIncentive > 0 ? 'text-emerald-700' : 'text-rose-700'
                           }`}
                         >
@@ -696,38 +851,38 @@ export const SalarySettingsModal: React.FC<SalarySettingsModalProps> = ({
                     {/* Bill Incentive */}
                     {salaryCalc.billIncentive > 0 && (
                       <tr className="hover:bg-neutral-50/70 bg-indigo-50/20">
-                        <td className="p-2.5">
-                          <span className="font-bold text-indigo-950 block">
+                        <td className="p-2 sm:p-2.5">
+                          <span className="font-bold text-indigo-950 block whitespace-nowrap">
                             Bill Incentive
                           </span>
-                          <span className="text-[10px] text-indigo-700">
+                          <span className="text-[10px] text-indigo-700 block whitespace-nowrap">
                             Manual Monthly Incentive
                           </span>
                         </td>
-                        <td className="p-2.5 text-center font-mono text-indigo-800 text-[11px]">
+                        <td className="p-2 sm:p-2.5 text-center font-mono text-indigo-800 text-[11px] whitespace-nowrap">
                           Monthly Total
                         </td>
-                        <td className="p-2.5 text-right font-mono font-bold text-indigo-800 tabular-nums">
+                        <td className="p-2 sm:p-2.5 text-right font-mono font-bold text-indigo-800 tabular-nums whitespace-nowrap">
                           + ₹{salaryCalc.billIncentive.toLocaleString()}
                         </td>
                       </tr>
                     )}
 
-                    {/* Leave Incentive */}
+                    {/* Leave + Holiday Incentive */}
                     {salaryCalc.leaveIncentive > 0 && (
                       <tr className="hover:bg-neutral-50/70 bg-emerald-50/20">
-                        <td className="p-2.5">
-                          <span className="font-bold text-emerald-950 block">
-                            Leave Incentive (Bonus)
+                        <td className="p-2 sm:p-2.5">
+                          <span className="font-bold text-emerald-950 block whitespace-nowrap">
+                            Leave + Holiday Incentive
                           </span>
-                          <span className="text-[10px] text-emerald-700">
-                            2 Days Salary (Full Attendance)
+                          <span className="text-[10px] text-emerald-700 block whitespace-nowrap">
+                            Bonus ({salaryCalc.leaveBonusDays || 0}d) + Sunday/Holiday ({salaryCalc.holidayWorkedDays || 0}d) = {(salaryCalc.totalLeaveHolidayDays || 0)} Days
                           </span>
                         </td>
-                        <td className="p-2.5 text-center font-mono text-emerald-800 text-[11px]">
-                          2 × ₹{salaryCalc.perDaySalary}
+                        <td className="p-2 sm:p-2.5 text-center font-mono text-emerald-800 text-[11px] whitespace-nowrap">
+                          {(salaryCalc.totalLeaveHolidayDays || 0)} × ₹{salaryCalc.perDaySalary}
                         </td>
-                        <td className="p-2.5 text-right font-mono font-bold text-emerald-800 tabular-nums">
+                        <td className="p-2 sm:p-2.5 text-right font-mono font-bold text-emerald-800 tabular-nums whitespace-nowrap">
                           + ₹{salaryCalc.leaveIncentive.toLocaleString()}
                         </td>
                       </tr>
@@ -736,18 +891,18 @@ export const SalarySettingsModal: React.FC<SalarySettingsModalProps> = ({
                     {/* Deductions Subtotal in Table */}
                     {salaryCalc.totalDeductions > 0 && (
                       <tr className="hover:bg-neutral-50/70 bg-rose-50/20">
-                        <td className="p-2.5">
-                          <span className="font-bold text-rose-950 block">
-                            Deductions (PF, ESI, Adv, etc.)
+                        <td className="p-2 sm:p-2.5">
+                          <span className="font-bold text-rose-950 block whitespace-nowrap">
+                            Deductions (PF, ESI, Adv, Leave Inc)
                           </span>
-                          <span className="text-[10px] text-rose-700">
-                            Default: PF ₹{salaryCalc.pf} · ESI ₹{salaryCalc.esi} · Adv ₹{salaryCalc.advance} · Other ₹{salaryCalc.otherDeduction}
+                          <span className="text-[10px] text-rose-700 block whitespace-nowrap">
+                            PF ₹{salaryCalc.pf} · ESI ₹{salaryCalc.esi} · Adv ₹{salaryCalc.advance} · Leave Inc ₹{salaryCalc.otherDeduction}
                           </span>
                         </td>
-                        <td className="p-2.5 text-center font-mono text-rose-800 text-[11px]">
+                        <td className="p-2 sm:p-2.5 text-center font-mono text-rose-800 text-[11px] whitespace-nowrap">
                           Total Deductions
                         </td>
-                        <td className="p-2.5 text-right font-mono font-bold text-rose-800 tabular-nums">
+                        <td className="p-2 sm:p-2.5 text-right font-mono font-bold text-rose-800 tabular-nums whitespace-nowrap">
                           − ₹{salaryCalc.totalDeductions.toLocaleString()}
                         </td>
                       </tr>
@@ -755,55 +910,61 @@ export const SalarySettingsModal: React.FC<SalarySettingsModalProps> = ({
 
                     {/* NET PAYABLE SALARY ROW */}
                     <tr className="bg-neutral-900 text-white font-bold border-t-2 border-neutral-950">
-                      <td className="p-3">
-                        <span className="text-sm uppercase tracking-wider block">
+                      <td className="p-2 sm:p-3">
+                        <span className="text-xs sm:text-sm uppercase tracking-wider block whitespace-nowrap">
                           NET PAYABLE SALARY
                         </span>
-                        <span className="text-[10px] text-neutral-400 font-normal">
+                        <span className="text-[10px] text-neutral-400 font-normal block whitespace-nowrap">
                           Total Earnings − Total Deductions
                         </span>
                       </td>
-                      <td className="p-3 text-center font-mono text-xs text-neutral-300">
-                        {selectedMonth} {salaryCalc.year} Total
+                      <td className="p-2 sm:p-3 text-center font-mono text-xs text-neutral-300 whitespace-nowrap">
+                        <span>
+                          {selectedMonth} {salaryCalc.year} Total
+                        </span>
                       </td>
-                      <td className="p-3 text-right font-mono text-lg sm:text-xl font-extrabold text-emerald-400 tabular-nums">
+                      <td className="p-2 sm:p-3 text-right font-mono text-base sm:text-xl font-extrabold text-emerald-400 tabular-nums whitespace-nowrap">
                         ₹{salaryCalc.netSalary.toLocaleString()}
                       </td>
                     </tr>
 
                     {/* PAYOUT SPLIT: BANK TRANSFER & CASH IN HAND */}
                     <tr className="bg-sky-50/70 text-sky-950 font-semibold border-t border-sky-200">
-                      <td className="p-2.5">
-                        <span className="font-bold flex items-center gap-1.5 text-xs text-sky-900">
-                          <Building className="w-3.5 h-3.5 text-sky-700" />
+                      <td className="p-2 sm:p-2.5">
+                        <span className="font-bold flex items-center gap-1.5 text-xs text-sky-900 whitespace-nowrap">
+                          <Building className="w-3.5 h-3.5 text-sky-700 shrink-0" />
                           <span>Bank Transfer</span>
                         </span>
-                        <span className="text-[10px] text-sky-600">
+                        <span className="text-[10px] text-sky-600 block whitespace-nowrap">
                           Direct Account Transfer (Basic Salary)
                         </span>
                       </td>
-                      <td className="p-2.5 text-center font-mono text-xs text-sky-800">
-                        Bank Payout
+                      <td className="p-2 sm:p-2.5 text-center font-mono text-xs text-sky-800 whitespace-nowrap">
+                        <span>
+                          Bank Payout
+                        </span>
                       </td>
-                      <td className="p-2.5 text-right font-mono font-bold text-sky-900 text-sm tabular-nums">
+                      <td className="p-2 sm:p-2.5 text-right font-mono font-bold text-sky-900 text-xs sm:text-sm tabular-nums whitespace-nowrap">
                         ₹{salaryCalc.bankTransferAmount.toLocaleString()}
                       </td>
                     </tr>
 
                     <tr className="bg-emerald-50/60 text-emerald-950 font-semibold border-t border-emerald-200">
-                      <td className="p-2.5">
-                        <span className="font-bold flex items-center gap-1.5 text-xs text-emerald-900">
-                          <Banknote className="w-3.5 h-3.5 text-emerald-700" />
+                      <td className="p-2 sm:p-2.5">
+                        <span className="font-bold flex items-center gap-1.5 text-xs text-emerald-900 whitespace-nowrap">
+                          <Banknote className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
                           <span>Cash in Hand</span>
                         </span>
-                        <span className="text-[10px] text-emerald-600">
+                        <span className="text-[10px] text-emerald-600 block whitespace-nowrap">
                           Balance Paid in Cash (Net Salary − Bank Transfer)
                         </span>
                       </td>
-                      <td className="p-2.5 text-center font-mono text-xs text-emerald-800">
-                        Balance Cash
+                      <td className="p-2 sm:p-2.5 text-center font-mono text-xs text-emerald-800 whitespace-nowrap">
+                        <span>
+                          Balance Cash
+                        </span>
                       </td>
-                      <td className="p-2.5 text-right font-mono font-bold text-emerald-800 text-sm tabular-nums">
+                      <td className="p-2 sm:p-2.5 text-right font-mono font-bold text-emerald-800 text-xs sm:text-sm tabular-nums whitespace-nowrap">
                         ₹{salaryCalc.cashInHandAmount.toLocaleString()}
                       </td>
                     </tr>
@@ -814,29 +975,30 @@ export const SalarySettingsModal: React.FC<SalarySettingsModalProps> = ({
           </div>
         </main>
 
-      {/* FULL SCREEN STICKY BOTTOM ACTION BAR */}
-      <footer className="sticky bottom-0 z-20 bg-white/95 backdrop-blur-md border-t border-neutral-200/90 px-4 sm:px-8 py-3 flex items-center justify-end sm:justify-between shadow-xs">
-        <span className="hidden sm:inline text-xs text-neutral-500 font-medium">
-          Salary Calculator · HR Configuration
-        </span>
-        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
-          <button
-            type="button"
-            onClick={handleRequestClose}
-            className="flex-1 sm:flex-none px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold uppercase tracking-wider rounded-xl transition-colors cursor-pointer border border-neutral-200 text-center"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="flex-1 sm:flex-none px-5 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-colors cursor-pointer shadow-xs text-center flex items-center justify-center gap-1.5"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>Save Changes</span>
-          </button>
-        </div>
-      </footer>
+        {/* MODAL BOTTOM ACTION BAR */}
+        <footer className="sticky bottom-0 z-20 bg-white border-t border-neutral-200/90 px-4 sm:px-6 py-3 flex items-center justify-end sm:justify-between shadow-xs shrink-0">
+          <span className="hidden sm:inline text-xs text-neutral-500 font-medium">
+            Salary Calculator · HR Configuration
+          </span>
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              onClick={handleRequestClose}
+              className="flex-1 sm:flex-none px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold uppercase tracking-wider rounded-xl transition-colors cursor-pointer border border-neutral-200 text-center"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              className="flex-1 sm:flex-none px-5 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-colors cursor-pointer shadow-xs text-center flex items-center justify-center gap-1.5"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>Save Changes</span>
+            </button>
+          </div>
+        </footer>
+      </div>
 
       {/* UNSAVED CHANGES CONFIRMATION MODAL */}
       {showDiscardConfirm && (

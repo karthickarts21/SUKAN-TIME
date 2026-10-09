@@ -166,6 +166,10 @@ export function calculateMonthlySalary(
   const manualHolidaysList = Array.isArray(monthObj.manualHolidays) ? monthObj.manualHolidays : [];
   const manualHolidaySet = new Set(manualHolidaysList);
 
+  // Manual Unpaid Leaves marked explicitly by user
+  const manualLeavesList = Array.isArray(monthObj.manualLeaves) ? monthObj.manualLeaves : [];
+  const manualLeaveSet = new Set(manualLeavesList);
+
   let nonOffManualHolidays = 0;
   for (const d of manualHolidaysList) {
     if (d >= 1 && d <= totalDays) {
@@ -185,7 +189,27 @@ export function calculateMonthlySalary(
   const perHourRate = dailyDutyHoursDecimal > 0 ? Number((perDaySalary / dailyDutyHoursDecimal).toFixed(2)) : 0;
 
   const dailyEntries = monthObj.dailyEntries || {};
-  const entriesList = Object.values(dailyEntries) as DayRecord[];
+  const curDayNumber = parseInt(monthObj.date?.split('-')[2] || '0', 10);
+
+  // Combine saved daily entries and current active session if active session has any times
+  const activeEntriesMap: Record<number, DayRecord> = { ...dailyEntries };
+  if (curDayNumber >= 1 && curDayNumber <= totalDays && !activeEntriesMap[curDayNumber] && monthObj.sections) {
+    const hasActiveTimes = monthObj.sections.some(s => s.startTime && s.endTime);
+    if (hasActiveTimes) {
+      const activeCalc = calculateTotalDuration(monthObj.sections);
+      activeEntriesMap[curDayNumber] = {
+        date: `${monthName} Date ${curDayNumber}`,
+        dayNumber: curDayNumber,
+        sections: monthObj.sections,
+        durations: activeCalc.durations,
+        totalDuration: activeCalc.totalFormatted,
+        otDuration: activeCalc.otFormatted,
+        savedAt: '',
+      };
+    }
+  }
+
+  const entriesList = Object.values(activeEntriesMap) as DayRecord[];
   const loggedDaysCount = entriesList.length;
 
   let totalWorkedMinutes = 0;
@@ -199,38 +223,90 @@ export function calculateMonthlySalary(
 
   for (const entry of entriesList) {
     const totals = calculateTotalDuration(entry.sections);
-    totalWorkedMinutes += totals.totalMinutes;
-    totalOtMinutes += totals.otMinutes;
-
-    // Sum automated early arrival / late departure incentive from daily records
-    if (entry.earlyIncentive !== undefined) {
-      autoEarlyIncentive += entry.earlyIncentive;
-    }
 
     // Check if this day is a weekly off day or a manual holiday
     const dt = new Date(year, mIdx, entry.dayNumber);
     const isOffDay = dt.getDay() === targetDayIdx || manualHolidaySet.has(entry.dayNumber);
 
-    if (totals.totalMinutes > 0) {
-      if (!isOffDay) {
+    // Requirement:
+    // "Holiday or Sunday kku 'Early Incentive & OT Incentive' kidaiyathu, Ethavathu any Start & End Time irunthaley 1 day salary (Leave + Holiday Incentive) add aaganum"
+    if (isOffDay) {
+      const hasAnyTime = entry.sections.some(
+        s => typeof s.startTime === 'string' && s.startTime.trim() !== '' && typeof s.endTime === 'string' && s.endTime.trim() !== ''
+      );
+      if (hasAnyTime || totals.totalMinutes > 0) {
+        holidayWorkedDays++;
+        totalWorkedMinutes += totals.totalMinutes;
+        // NOTE: No OT and No Early Incentive added for Holiday / Sunday work!
+      }
+    } else {
+      totalWorkedMinutes += totals.totalMinutes;
+      totalOtMinutes += totals.otMinutes;
+
+      // Sum automated early arrival / late departure incentive from daily records on regular working days only
+      if (entry.earlyIncentive !== undefined) {
+        autoEarlyIncentive += entry.earlyIncentive;
+      }
+
+      if (totals.totalMinutes > 0) {
         presentDays++;
         if (totals.totalMinutes < halfDutyMinsThreshold) {
           halfDaysCount++;
         }
-      } else {
-        // Employee worked on Holiday / Sunday: Count as extra worked day salary
-        holidayWorkedDays++;
       }
     }
   }
 
-  const leaveDays = Math.max(0, workingDays - presentDays);
+  // Check if the month's last date (e.g. 31 for Oct, 30 for Nov) has an End Time entered/logged
+  const lastDayNumber = totalDays;
+  const lastDayRecord = dailyEntries[lastDayNumber] || dailyEntries[String(lastDayNumber)];
+  
+  const activeSections = curDayNumber === lastDayNumber ? monthObj.sections : undefined;
 
-  // Business Rule: If employee attends ALL working days (Leave == 0), give 2 days salary incentive
-  const isLeaveIncentiveEligible = leaveDays === 0 && workingDays > 0 && presentDays >= workingDays;
-  const leaveIncentive = isLeaveIncentiveEligible ? Number((perDaySalary * 2).toFixed(2)) : 0;
+  const hasLastDayEndTime = Boolean(
+    (lastDayRecord?.sections && lastDayRecord.sections.some(s => typeof s.endTime === 'string' && s.endTime.trim() !== '')) ||
+    (activeSections && activeSections.some(s => typeof s.endTime === 'string' && s.endTime.trim() !== ''))
+  );
 
-  // Holiday Worked Salary: When time is added on Sunday or Holiday, add that day's salary to Earnings
+  // Count unworked manual unpaid leaves
+  let manualUnpaidLeavesCount = 0;
+  for (const d of manualLeavesList) {
+    if (d >= 1 && d <= totalDays) {
+      const dt = new Date(year, mIdx, d);
+      const isOff = dt.getDay() === targetDayIdx || manualHolidaySet.has(d);
+      if (!isOff) {
+        const entry = dailyEntries[d] || dailyEntries[String(d)];
+        const totals = entry ? calculateTotalDuration(entry.sections) : { totalMinutes: 0 };
+        if (totals.totalMinutes === 0) {
+          manualUnpaidLeavesCount++;
+        }
+      }
+    }
+  }
+
+  // Business Rule:
+  // "LEAVE INCENTIVE la 'Leave' la ipothai kku 0 kattanum, month oda lost la thaan Leave Calculation aaganum"
+  // Manually marked Unpaid Leaves show immediately. At month end (hasLastDayEndTime), all unlogged working days are calculated.
+  const leaveDays = hasLastDayEndTime
+    ? Math.max(manualUnpaidLeavesCount, workingDays - presentDays)
+    : manualUnpaidLeavesCount;
+
+  // Business Rule: Tiered Leave + Holiday Incentive in EARNINGS
+  // Requirement:
+  // "Holiday mark pannirunthu & Sunday time add panniruntha 'EARNINGS' la irukka 'Leave Incentive' la
+  // bonus 2 days + (Holiday or Sunday) salary add aaganum (2+1 or etc.),
+  // and next 'EARNINGS' la irukka 'Leave Incentive' change to 'Leave + Holiday Incentive'"
+  // Leave 0 => 2 Days Salary Bonus
+  // Leave 1 => 1 Day Salary Bonus
+  // Leave >= 2 => 0 Bonus
+  // Plus: Extra days worked on Sunday or Marked Holiday (holidayWorkedDays)
+  const leaveBonusDays = hasLastDayEndTime ? (leaveDays === 0 ? 2 : leaveDays === 1 ? 1 : 0) : 0;
+  const totalLeaveHolidayDays = leaveBonusDays + holidayWorkedDays;
+  const leaveHolidayIncentive = Number((totalLeaveHolidayDays * perDaySalary).toFixed(2));
+  const leaveIncentive = leaveHolidayIncentive;
+  const isLeaveIncentiveEligible = (hasLastDayEndTime && leaveDays <= 1 && workingDays > 0) || holidayWorkedDays > 0;
+
+  // Holiday Worked Salary is now grouped directly in Leave + Holiday Incentive
   const holidayWorkedSalary = Number((holidayWorkedDays * perDaySalary).toFixed(2));
 
   // Early Incentive
@@ -257,16 +333,18 @@ export function calculateMonthlySalary(
   const otHoursDecimal = totalOtMinutes / 60;
   const otIncentive = Number((otHoursDecimal * perHourRate * multiplier).toFixed(2));
 
-  // Earned Basic Salary (Regular earned salary + extra Holiday worked salary)
-  const earnedRegularSalary = presentDays >= workingDays
+  // Earned Basic Salary (Fixed Monthly Basic Salary)
+  // Requirement:
+  // "EARNINGS" Basic salary "daily Complete" aana Earnings kattanum, Full month leave, sunday, HOliday Poga Complete aana 2 days Leave naalum, Basic Salary la "Settings La Basic salary" thaa kattanum
+  const progressiveEarned = Number((presentDays * perDaySalary).toFixed(2));
+  const earnedRegularSalary = hasLastDayEndTime
     ? basicSalary
-    : Number((presentDays * perDaySalary).toFixed(2));
-  
-  const earnedBasicSalary = Number((earnedRegularSalary + holidayWorkedSalary).toFixed(2));
+    : Math.min(basicSalary, progressiveEarned);
+  const earnedBasicSalary = Number(earnedRegularSalary.toFixed(2));
 
   // Total Earnings
   const totalEarnings = Number(
-    (earnedBasicSalary + earlyIncentive + billIncentive + leaveIncentive + otIncentive).toFixed(2)
+    (earnedBasicSalary + earlyIncentive + billIncentive + leaveHolidayIncentive + otIncentive).toFixed(2)
   );
 
   // Requirement: "DEDUCTIONS" la PF, ESI settings la mattum thaa edit panra mari venum
@@ -279,7 +357,18 @@ export function calculateMonthlySalary(
   const isEsiDefault = true;
 
   const defaultAdvance = settings.defaultAdvance ?? 0;
-  const defaultOtherDeduction = settings.defaultOtherDeduction ?? 0;
+
+  // Requirement:
+  // "Day Selector la 'unpaid Leave' Add pannirunthalum 'DEDUCTIONS' la irukka 'Leave Incentive' la 3 days & Etc.... athukku mela 'Leave' nna (2 days Bonus) kalichi thaa 'DEDUCTIONS' la 'Leave Incentive' 1 day, Etc Salary - aaganum"
+  // 2 days free bonus leave allowance subtracted from total leave days:
+  // Leave 0 => 0 deducted (2 days bonus in EARNINGS)
+  // Leave 1 => 0 deducted (1 day bonus in EARNINGS)
+  // Leave 2 => 0 deducted (0 bonus in EARNINGS)
+  // Leave 3 => (3 - 2) = 1 day salary deducted
+  // Leave 4 => (4 - 2) = 2 days salary deducted
+  const deductedLeaveDays = Math.max(0, leaveDays - 2);
+  const autoLeaveDeduction = Number((deductedLeaveDays * perDaySalary).toFixed(2));
+  const defaultOtherDeduction = autoLeaveDeduction;
 
   const isAdvanceDefault = monthObj.salaryData?.advance === undefined;
   const advance = !isAdvanceDefault ? monthObj.salaryData!.advance! : defaultAdvance;
@@ -294,21 +383,6 @@ export function calculateMonthlySalary(
   );
 
   // Requirement:
-  // "Total Deduction la irukka money monthoda lost date la end time kudutha Net salary la irunthu (-) aaganum,
-  // athuvaraikkum Net salary la irunthu (- deduction aaga kudathu) only Month lost date Lost End Time Only.
-  // Same bank transfers-la month lost date end time update pannuna thaan "bank transfer" la money kattanum"
-  // Check if the month's last date (e.g. 31 for Oct, 30 for Nov) has an End Time entered/logged
-  const lastDayNumber = totalDays;
-  const lastDayRecord = dailyEntries[lastDayNumber] || dailyEntries[String(lastDayNumber)];
-  
-  const curDayNumber = parseInt(monthObj.date?.split('-')[2] || '0', 10);
-  const activeSections = curDayNumber === lastDayNumber ? monthObj.sections : undefined;
-
-  const hasLastDayEndTime = Boolean(
-    (lastDayRecord?.sections && lastDayRecord.sections.some(s => typeof s.endTime === 'string' && s.endTime.trim() !== '')) ||
-    (activeSections && activeSections.some(s => typeof s.endTime === 'string' && s.endTime.trim() !== ''))
-  );
-
   // Deductions are only subtracted from Net Salary when the month's last date has an end time!
   const appliedDeductions = hasLastDayEndTime ? totalDeductions : 0;
 
@@ -316,31 +390,34 @@ export function calculateMonthlySalary(
   const netSalary = Number(Math.max(0, totalEarnings - appliedDeductions).toFixed(2));
 
   // Bank Transfer & Cash in Hand Split:
-  // Bank transfer only shows money once month's last date has an end time updated!
+  // Requirement:
+  // "Earning la Kammiya Irunthalum, Bank Transfer la Setting la enna irukko athu apdi ye varanum, Yenna Earning ah vida Salary athikamanal, Cash in Hand la (-) la amound varanum"
   let bankTransfer = 0;
+  let cashInHand = 0;
+
   if (hasLastDayEndTime) {
-    if (monthObj.salaryData?.bankTransferAmount !== undefined) {
-      bankTransfer = monthObj.salaryData.bankTransferAmount;
-    } else if (typeof settings.bankTransferAmount === 'number' && settings.bankTransferAmount > 0) {
+    // Priority: Whatever user configured in Settings for Bank Transfer comes directly
+    if (typeof settings.bankTransferAmount === 'number' && settings.bankTransferAmount > 0) {
       bankTransfer = settings.bankTransferAmount;
+    } else if (typeof settings.basicSalary === 'number' && settings.basicSalary > 0) {
+      bankTransfer = settings.basicSalary;
+    } else if (monthObj.salaryData?.bankTransferAmount !== undefined) {
+      bankTransfer = monthObj.salaryData.bankTransferAmount;
     } else {
-      // Default is Basic Salary (or earned basic salary), capped at netSalary
-      bankTransfer = earnedBasicSalary;
+      bankTransfer = basicSalary;
     }
 
-    // Ensure bankTransfer does not exceed netSalary if netSalary > 0
-    if (netSalary > 0 && bankTransfer > netSalary) {
-      bankTransfer = netSalary;
-    } else if (netSalary <= 0) {
-      bankTransfer = 0;
-    }
+    // Cash in Hand: Net Salary (Total Earnings minus Deductions) minus Bank Transfer.
+    // If Net Salary after deductions is less than Bank Transfer, it displays as negative (-) amount!
+    cashInHand = netSalary - bankTransfer;
   } else {
-    // Before month's last date end time, bank transfer does not show money
+    // Before month's last date end time, both Bank Transfer and Cash in Hand remain 0 / Pending
     bankTransfer = 0;
+    cashInHand = 0;
   }
 
   const bankTransferAmount = Number(bankTransfer.toFixed(2));
-  const cashInHandAmount = Number(Math.max(0, netSalary - bankTransferAmount).toFixed(2));
+  const cashInHandAmount = Number(cashInHand.toFixed(2));
 
   return {
     monthName,
@@ -374,6 +451,10 @@ export function calculateMonthlySalary(
     autoBillCount,
     isBillIncentiveAuto: false,
     leaveIncentive,
+    leaveHolidayIncentive,
+    leaveBonusDays,
+    deductedLeaveDays,
+    totalLeaveHolidayDays,
     isLeaveIncentiveEligible,
     otIncentive,
     totalEarnings,

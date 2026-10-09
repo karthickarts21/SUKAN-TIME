@@ -63,7 +63,7 @@ export async function exportMonthPdfReport(monthName: string, monthObj: MonthDat
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
-  doc.text(`TIME CALCULATOR — MONTHLY REPORT: ${monthName.toUpperCase()} ${year}`, 40, 36);
+  doc.text(`SALARY CALCULATOR — MONTHLY REPORT: ${monthName.toUpperCase()} ${year}`, 40, 36);
 
   // Subtitle info
   doc.setFontSize(10);
@@ -199,25 +199,25 @@ export async function exportMonthPdfReport(monthName: string, monthObj: MonthDat
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      `Time Calculator · Powered by Karthi Designer | Page ${i} of ${pageCount}`,
+      `Salary Calculator · Powered by Karthi Designer | Page ${i} of ${pageCount}`,
       doc.internal.pageSize.getWidth() / 2,
       doc.internal.pageSize.getHeight() - 15,
       { align: 'center' }
     );
   }
 
-  const fileName = `Time_Calculator_${monthName}_Report_${year}.pdf`;
+  const fileName = `Salary_Calculator_${monthName}_Report_${year}.pdf`;
   doc.save(fileName);
 }
 
 /**
- * Generates and downloads a clean, professional Salary Payslip PDF
+ * Generates jsPDF document instance for Salary Payslip with accurate formatting
  */
-export async function exportSalarySlipPdf(
+export function generateSalarySlipDoc(
   monthName: string,
   monthObj: MonthData,
   settings: SalarySettings
-): Promise<void> {
+): { doc: jsPDF; fileName: string } {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'pt',
@@ -277,7 +277,7 @@ export async function exportSalarySlipPdf(
     ['Basic Salary (Earned)', `Rs. ${salaryCalc.earnedBasicSalary.toLocaleString()}`],
     ['Early Arrival Incentive', `Rs. ${salaryCalc.earlyIncentive.toLocaleString()}`],
     [`Bill Incentive (${salaryCalc.autoBillCount} bills @ Rs. 30)`, `Rs. ${salaryCalc.billIncentive.toLocaleString()}`],
-    ['Leave Attendance Incentive', `Rs. ${salaryCalc.leaveIncentive.toLocaleString()}`],
+    [`Leave + Holiday Incentive (${salaryCalc.totalLeaveHolidayDays || 0} days)`, `Rs. ${salaryCalc.leaveIncentive.toLocaleString()}`],
     [`Overtime (OT) Incentive (${(salaryCalc.totalOtMinutes / 60).toFixed(1)} hrs)`, `Rs. ${salaryCalc.otIncentive.toLocaleString()}`],
   ];
 
@@ -286,7 +286,7 @@ export async function exportSalarySlipPdf(
     ['Employee State Insurance (ESI)', `Rs. ${salaryCalc.esi.toLocaleString()}`],
     ['Salary Advance', `Rs. ${salaryCalc.advance.toLocaleString()}`],
     ['Half Day Deductions', `Rs. ${salaryCalc.halfDayDeduction.toLocaleString()}`],
-    ['Other Deductions', `Rs. ${salaryCalc.otherDeduction.toLocaleString()}`],
+    ['Leave Incentive Deduction', `Rs. ${salaryCalc.otherDeduction.toLocaleString()}`],
   ];
 
   const maxRows = Math.max(earningsRows.length, deductionsRows.length);
@@ -357,7 +357,13 @@ export async function exportSalarySlipPdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(203, 213, 225);
-  doc.text('(Total Earnings - Total Deductions)', 55, finalY + 38);
+  doc.text(
+    salaryCalc.hasLastDayEndTime
+      ? '(Total Earnings - Total Deductions)'
+      : `(Total Earnings - Deductions apply on Day ${salaryCalc.totalDays} End Time)`,
+    55,
+    finalY + 38
+  );
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
@@ -374,14 +380,35 @@ export async function exportSalarySlipPdf(
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(3, 105, 161); // Sky
   doc.text('BANK TRANSFER PAYOUT:', 55, payoutY + 24);
-  doc.setFontSize(12);
-  doc.text(`Rs. ${salaryCalc.bankTransferAmount.toLocaleString()}`, 215, payoutY + 24);
+  doc.setFontSize(11);
+  if (salaryCalc.hasLastDayEndTime) {
+    doc.text(`Rs. ${salaryCalc.bankTransferAmount.toLocaleString()}`, 215, payoutY + 24);
+  } else {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Pending Day ${salaryCalc.totalDays} End Time`, 215, payoutY + 24);
+  }
 
   doc.setFontSize(9);
-  doc.setTextColor(4, 120, 87); // Emerald
-  doc.text('CASH IN HAND BALANCE:', 340, payoutY + 24);
-  doc.setFontSize(12);
-  doc.text(`Rs. ${salaryCalc.cashInHandAmount.toLocaleString()}`, 490, payoutY + 24);
+  doc.setFont('helvetica', 'bold');
+  if (!salaryCalc.hasLastDayEndTime) {
+    doc.setTextColor(148, 163, 184);
+    doc.text('CASH IN HAND BALANCE:', 340, payoutY + 24);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`Pending Day ${salaryCalc.totalDays} End Time`, 480, payoutY + 24);
+  } else if (salaryCalc.cashInHandAmount < 0) {
+    doc.setTextColor(190, 18, 60); // Red / Rose for negative
+    doc.text('CASH IN HAND BALANCE (-):', 330, payoutY + 24);
+    doc.setFontSize(11);
+    doc.text(`-Rs. ${Math.abs(salaryCalc.cashInHandAmount).toLocaleString()}`, 485, payoutY + 24);
+  } else {
+    doc.setTextColor(4, 120, 87); // Emerald
+    doc.text('CASH IN HAND BALANCE:', 340, payoutY + 24);
+    doc.setFontSize(11);
+    doc.text(`Rs. ${salaryCalc.cashInHandAmount.toLocaleString()}`, 485, payoutY + 24);
+  }
 
   // Signatures
   const signY = payoutY + 85;
@@ -406,5 +433,58 @@ export async function exportSalarySlipPdf(
   );
 
   const fileName = `Salary_Slip_${monthName}_${year}.pdf`;
+  return { doc, fileName };
+}
+
+/**
+ * Generates and downloads a clean, professional Salary Payslip PDF
+ */
+export async function exportSalarySlipPdf(
+  monthName: string,
+  monthObj: MonthData,
+  settings: SalarySettings
+): Promise<void> {
+  const { doc, fileName } = generateSalarySlipDoc(monthName, monthObj, settings);
   doc.save(fileName);
+}
+
+/**
+ * Prints the Salary Payslip using the EXACT SAME PDF format as the download!
+ */
+export async function printSalarySlipPdf(
+  monthName: string,
+  monthObj: MonthData,
+  settings: SalarySettings
+): Promise<void> {
+  const { doc } = generateSalarySlipDoc(monthName, monthObj, settings);
+  doc.autoPrint();
+
+  const blob = doc.output('blob');
+  const blobUrl = URL.createObjectURL(blob);
+
+  // Create an iframe to print the exact PDF
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  iframe.style.visibility = 'hidden';
+  iframe.src = blobUrl;
+  document.body.appendChild(iframe);
+
+  iframe.onload = () => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } catch {
+      // Fallback
+      window.open(blobUrl, '_blank')?.print();
+    }
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+      URL.revokeObjectURL(blobUrl);
+    }, 60000);
+  };
 }

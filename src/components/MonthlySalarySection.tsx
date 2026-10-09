@@ -137,7 +137,7 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
             className="px-3 py-1.5 sm:px-3 sm:py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-lg text-xs font-bold uppercase tracking-wider border border-neutral-200 transition-colors flex items-center gap-1 cursor-pointer"
             title="Configure Basic Salary, Duty Hours, and Weekly Off"
           >
-            <span>SETTINGS</span>
+            <span>SALARY SETTINGS</span>
           </button>
         </div>
       </div>
@@ -342,9 +342,16 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
             </div>
             <div className="bg-neutral-800/90 px-2 py-1 rounded border border-neutral-700/60">
               <span className="text-emerald-300/80 block text-[8px] font-bold uppercase tracking-wider">💵 Cash in Hand</span>
-              <span className="text-emerald-300 font-extrabold text-xs tabular-nums">
-                ₹{salaryCalc.cashInHandAmount.toLocaleString()}
+              <span className={`font-extrabold text-xs tabular-nums ${
+                salaryCalc.cashInHandAmount < 0 ? 'text-rose-400 font-black' : 'text-emerald-300'
+              }`}>
+                {salaryCalc.cashInHandAmount < 0
+                  ? `-₹${Math.abs(salaryCalc.cashInHandAmount).toLocaleString()}`
+                  : `₹${salaryCalc.cashInHandAmount.toLocaleString()}`}
               </span>
+              {!salaryCalc.hasLastDayEndTime && (
+                <span className="block text-[8px] text-neutral-400 truncate">Pending Day {salaryCalc.totalDays}</span>
+              )}
             </div>
           </div>
         </div>
@@ -375,7 +382,7 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
           <span className="font-bold text-indigo-700">{salaryCalc.totalOtFormatted}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider">LEAVE INCENTIVE:</span>
+          <span className="text-neutral-500 text-[10px] font-bold uppercase tracking-wider">LEAVE + HOLIDAY INCENTIVE:</span>
           <span className={`font-bold ${salaryCalc.leaveIncentive > 0 ? 'text-emerald-700' : 'text-neutral-400'}`}>
             ₹{salaryCalc.leaveIncentive.toLocaleString()}
           </span>
@@ -438,7 +445,11 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
               <div className="flex items-center justify-between py-0.5">
                 <div>
                   <span className="font-semibold text-neutral-800 block">Basic Salary</span>
-                  <span className="text-[10px] text-neutral-400">Fixed Monthly</span>
+                  <span className="text-[10px] text-neutral-400">
+                    {salaryCalc.hasLastDayEndTime
+                      ? `Full Month (Settings: ₹${salaryCalc.basicSalary.toLocaleString()})`
+                      : `${salaryCalc.presentDays} of ${salaryCalc.workingDays} days worked`}
+                  </span>
                 </div>
                 <span className="font-mono font-bold text-neutral-900 tabular-nums">
                   ₹{salaryCalc.earnedBasicSalary.toLocaleString()}
@@ -576,11 +587,13 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
                 </div>
               </div>
 
-              {/* 4. Leave Incentive */}
+              {/* 4. Leave + Holiday Incentive */}
               <div className="flex items-center justify-between py-0.5">
                 <div>
-                  <span className="font-semibold text-neutral-800 block">Leave Incentive</span>
-                  <span className="text-[10px] text-neutral-400">2 Days Salary Bonus</span>
+                  <span className="font-semibold text-neutral-800 block">Leave + Holiday Incentive</span>
+                  <span className="text-[10px] text-neutral-400">
+                    Bonus ({salaryCalc.leaveBonusDays || 0}d) + Sunday/Holiday ({salaryCalc.holidayWorkedDays || 0}d) = {(salaryCalc.totalLeaveHolidayDays || 0)}d
+                  </span>
                 </div>
                 <span
                   className={`font-mono font-bold tabular-nums ${
@@ -618,7 +631,7 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
         </div>
 
         {/* ==================================================== */}
-        {/* CARD 2: LEAVE INCENTIVE CARD UI */}
+        {/* CARD 2: LEAVE + HOLIDAY INCENTIVE CARD UI */}
         {/* ==================================================== */}
         <div
           className={`${
@@ -630,7 +643,7 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
               <div className="flex items-center gap-1.5">
                 <Award className="w-4 h-4 text-indigo-600" />
                 <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-900">
-                  LEAVE INCENTIVE
+                  LEAVE + HOLIDAY INCENTIVE
                 </h3>
               </div>
               <span
@@ -667,24 +680,16 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
               </div>
 
               <div className="flex items-center justify-between py-0.5">
-                <span className="text-neutral-600">Eligibility</span>
-                {salaryCalc.isLeaveIncentiveEligible ? (
-                  <span className="inline-flex items-center gap-1 font-bold text-emerald-700">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>✓ Eligible</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 font-bold text-rose-700">
-                    <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                    <span>✕ Not Eligible</span>
-                  </span>
-                )}
+                <span className="text-neutral-600">Sunday / Holiday Worked</span>
+                <span className="font-mono font-bold text-indigo-700">
+                  +{salaryCalc.holidayWorkedDays || 0} Day(s)
+                </span>
               </div>
 
               <div className="flex items-center justify-between py-0.5">
-                <span className="text-neutral-600">Incentive Rule</span>
-                <span className="font-mono font-bold text-neutral-800">
-                  {salaryCalc.isLeaveIncentiveEligible ? '2 Days Salary' : 'None'}
+                <span className="text-neutral-600">Incentive Calculation</span>
+                <span className="font-mono font-bold text-emerald-800 text-[11px]">
+                  {salaryCalc.leaveBonusDays || 0}d (Bonus) + {salaryCalc.holidayWorkedDays || 0}d (Holiday) = {(salaryCalc.totalLeaveHolidayDays || 0)} Days
                 </span>
               </div>
             </div>
@@ -789,11 +794,11 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
                 </div>
               </div>
 
-              {/* 3. ADVANCE */}
+              {/* 3. Advance (Title Case) */}
               <div className="flex items-center justify-between py-0.5">
                 <div className="min-w-0 pr-2">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-semibold text-neutral-800">ADVANCE</span>
+                    <span className="font-semibold text-neutral-800">Advance</span>
                     {salaryCalc.isAdvanceDefault ? (
                       <span className="text-[9px] font-mono font-semibold text-neutral-500 bg-neutral-100 px-1.5 py-0.2 rounded border border-neutral-200">
                         Default: ₹{salaryCalc.defaultAdvance.toLocaleString()}
@@ -837,10 +842,10 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
                 </div>
               </div>
 
-              {/* 4. HALF DAY DEDUCTION (Automatic) */}
+              {/* 4. Half Day Deduction (Title Case) */}
               <div className="flex items-center justify-between py-0.5">
                 <div>
-                  <span className="font-semibold text-neutral-800 block">HALF DAY DEDUCTION</span>
+                  <span className="font-semibold text-neutral-800 block">Half Day Deduction</span>
                   <span className="text-[10px] text-neutral-400">
                     {salaryCalc.halfDaysCount} half day(s) × (Per Day ÷ 2)
                   </span>
@@ -850,14 +855,14 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
                 </span>
               </div>
 
-              {/* 5. OTHER DEDUCTION */}
+              {/* 5. LEAVE INCENTIVE DEDUCTION (2 days bonus leave free; 3+ days: leaves - 2 deducted) */}
               <div className="flex items-center justify-between py-0.5">
                 <div className="min-w-0 pr-2">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-semibold text-neutral-800">OTHER DEDUCTION</span>
+                    <span className="font-semibold text-neutral-800">Leave Incentive</span>
                     {salaryCalc.isOtherDeductionDefault ? (
                       <span className="text-[9px] font-mono font-semibold text-neutral-500 bg-neutral-100 px-1.5 py-0.2 rounded border border-neutral-200">
-                        Default: ₹{salaryCalc.defaultOtherDeduction.toLocaleString()}
+                        Auto: ₹{salaryCalc.defaultOtherDeduction.toLocaleString()} ({salaryCalc.deductedLeaveDays || 0}d deducted)
                       </span>
                     ) : (
                       <span className="text-[9px] font-mono font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
@@ -865,7 +870,13 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
                       </span>
                     )}
                   </div>
-                  <span className="text-[10px] text-neutral-400 block">Misc Deductions</span>
+                  <span className="text-[10px] text-neutral-400 block">
+                    {salaryCalc.leaveDays > 2
+                      ? `${salaryCalc.leaveDays} leaves (2 bonus subtracted) = ${salaryCalc.deductedLeaveDays || 0}d × ₹${salaryCalc.perDaySalary}/day`
+                      : salaryCalc.leaveDays > 0
+                      ? `${salaryCalc.leaveDays} leave(s) (Covered under 2 days free bonus leaves — ₹0 deducted)`
+                      : '0 Leave Days (No deduction)'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <div className="relative w-22">
@@ -890,7 +901,7 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
                       type="button"
                       onClick={() => handleResetDeductionToDefault('otherDeduction')}
                       className="p-1 text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100 rounded transition-colors cursor-pointer"
-                      title={`Reset Other Deduction to Settings default (₹${salaryCalc.defaultOtherDeduction})`}
+                      title={`Reset Leave Incentive deduction to automatic (₹${salaryCalc.defaultOtherDeduction})`}
                     >
                       <RotateCcw className="w-3 h-3" />
                     </button>

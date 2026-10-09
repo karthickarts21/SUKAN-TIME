@@ -298,6 +298,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           ) : (
             /* VIEW WHEN LOGGED OUT: EMAIL + PASSWORD FORM */
             <form onSubmit={handleSubmit} className="space-y-3.5">
+              {/* CLEAR & PROMINENT TABS FOR SIGN IN VS SIGN UP */}
+              <div className="grid grid-cols-2 p-1 bg-neutral-100 rounded-xl border border-neutral-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSignUp(false);
+                    setErrorMsg(null);
+                  }}
+                  className={`py-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+                    !isSignUp
+                      ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200/80 font-extrabold'
+                      : 'text-neutral-500 hover:text-neutral-900 font-semibold'
+                  }`}
+                >
+                  Sign In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSignUp(true);
+                    setErrorMsg(null);
+                  }}
+                  className={`py-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+                    isSignUp
+                      ? 'bg-emerald-600 text-white shadow-xs font-extrabold'
+                      : 'text-neutral-600 hover:text-neutral-900 font-semibold'
+                  }`}
+                >
+                  Sign Up (New User)
+                </button>
+              </div>
+
               <p className="text-[11px] text-neutral-600 leading-normal">
                 {isSignUp
                   ? 'Create an account to securely save your BroTime attendance and salary records to Cloud Firestore.'
@@ -371,7 +403,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 px-3 bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50 mt-2"
+                className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50 mt-2 ${
+                  isSignUp
+                    ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-emerald-900/10'
+                    : 'bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white'
+                }`}
               >
                 {loading ? (
                   <>
@@ -379,7 +415,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <span>{isSignUp ? 'Creating Account...' : 'Signing In...'}</span>
                   </>
                 ) : (
-                  <span>{isSignUp ? 'Create Account' : 'Sign In'}</span>
+                  <span>{isSignUp ? 'Sign Up & Create Account' : 'Sign In to BroTime'}</span>
                 )}
               </button>
 
