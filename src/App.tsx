@@ -46,7 +46,7 @@ import { DEFAULT_SALARY_SETTINGS, loadSalarySettings, saveSalarySettings } from 
 import { exportMonthExcelReport } from './utils/excelExporter';
 import { exportMonthPdfReport } from './utils/pdfExporter';
 import { getYearFromDate, isSunday } from './utils/dateUtils';
-import { CalendarDays, Palmtree, Plus, UserX, X } from 'lucide-react';
+import { CalendarDays, Palmtree, Plus, RotateCcw, UserX, X } from 'lucide-react';
 
 export default function App() {
   const [appState, setAppState] = useState(() => loadStorage());
@@ -431,6 +431,33 @@ export default function App() {
   const handleClearSingleSection = (sectionIndex: number) => {
     const cleared = createEmptyTimeEntry(sectionIndex);
     handleSectionChange(sectionIndex, cleared);
+  };
+
+  // Cancel / Reset current active session back to empty (e.g. discard loaded/restored record)
+  const handleResetCurrentSessions = () => {
+    setAppState((prev) => {
+      const cur = prev.months[currentMonth];
+      if (!cur) return prev;
+      const emptySections: [TimeEntry, TimeEntry, TimeEntry, TimeEntry] = [
+        createEmptyTimeEntry(0),
+        createEmptyTimeEntry(1),
+        createEmptyTimeEntry(2),
+        createEmptyTimeEntry(3),
+      ];
+      const nextState = {
+        ...prev,
+        months: {
+          ...prev.months,
+          [currentMonth]: {
+            ...cur,
+            sections: emptySections,
+          },
+        },
+      };
+      saveStorage(nextState);
+      return nextState;
+    });
+    setShowSection4(false);
   };
 
   // Change active date: syncs month if user picks a date with a different month
@@ -1067,6 +1094,10 @@ export default function App() {
 
   const isCurrentOffDay = isCurrentSunday || isCurrentManualHoliday;
 
+  const hasAnyActiveSessionTimes = (monthData.sections || []).some(
+    (s) => (typeof s.startTime === 'string' && s.startTime.trim() !== '') || (typeof s.endTime === 'string' && s.endTime.trim() !== '')
+  );
+
   // Calculate total duration & early incentive for current active month sections
   const rawTotalCalc = calculateTotalDuration(monthData.sections);
   const rawEarlyInc = calculateEarlyIncentive(monthData.sections);
@@ -1166,33 +1197,48 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Optional Section 4 Toggle: Icon button */}
-                {!showSection4 ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowSection4(true)}
-                    className="p-1.5 sm:px-2.5 sm:py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-700 hover:text-neutral-900 border border-neutral-200 transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs text-xs font-semibold shrink-0"
-                    title="Add Session 4 (Overtime / Night)"
-                    aria-label="Add Session 4 (Overtime / Night)"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-neutral-600" />
-                    <span className="hidden sm:inline">Add Session 4</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleClearSingleSection(3);
-                      setShowSection4(false);
-                    }}
-                    className="p-1.5 sm:px-2.5 sm:py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-500 hover:text-neutral-800 border border-neutral-200 transition-colors inline-flex items-center gap-1 cursor-pointer text-xs font-medium shrink-0"
-                    title="Hide Session 4"
-                    aria-label="Hide Session 4"
-                  >
-                    <X className="w-3.5 h-3.5 text-neutral-500" />
-                    <span className="hidden sm:inline">Hide S4</span>
-                  </button>
-                )}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {hasAnyActiveSessionTimes && (
+                    <button
+                      type="button"
+                      onClick={handleResetCurrentSessions}
+                      className="p-1.5 sm:px-2.5 sm:py-1 rounded-lg bg-neutral-100 hover:bg-rose-50 text-neutral-600 hover:text-rose-700 border border-neutral-200 hover:border-rose-300 transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs text-xs font-semibold"
+                      title="Cancel / Reset session entries (clear loaded record)"
+                      aria-label="Cancel or reset current session entries"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Cancel / Reset</span>
+                    </button>
+                  )}
+
+                  {/* Optional Section 4 Toggle: Icon button */}
+                  {!showSection4 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowSection4(true)}
+                      className="p-1.5 sm:px-2.5 sm:py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-700 hover:text-neutral-900 border border-neutral-200 transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs text-xs font-semibold shrink-0"
+                      title="Add Session 4 (Overtime / Night)"
+                      aria-label="Add Session 4 (Overtime / Night)"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-neutral-600" />
+                      <span className="hidden sm:inline">Add Session 4</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleClearSingleSection(3);
+                        setShowSection4(false);
+                      }}
+                      className="p-1.5 sm:px-2.5 sm:py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-500 hover:text-neutral-800 border border-neutral-200 transition-colors inline-flex items-center gap-1 cursor-pointer text-xs font-medium shrink-0"
+                      title="Hide Session 4"
+                      aria-label="Hide Session 4"
+                    >
+                      <X className="w-3.5 h-3.5 text-neutral-500" />
+                      <span className="hidden sm:inline">Hide S4</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* 3 EQUAL COMPACT CARDS IN A ROW (or 4 if expanded) */}
@@ -1270,6 +1316,7 @@ export default function App() {
               onToggleHoliday={handleToggleHoliday}
               currentSections={monthData.sections}
               currentDate={monthData.date}
+              dailyDutyHours={salarySettings.dailyDutyHours}
               onSaveDayRecord={handleSaveDayRecord}
               onDeleteDayRecord={handleDeleteDayRecord}
               onLoadDayRecordToSheet={handleLoadDayRecordToSheet}

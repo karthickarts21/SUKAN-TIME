@@ -257,6 +257,76 @@ export function calculateMonthlySalary(
     }
   }
 
+  // Requirement:
+  // "TIme ethumey enter pannatha month la 'EARNINGS' & LEAVE + HOLIDAY INCENTIVE, DEDUCTIONS' calculate aaga kudathu, ellamey 0 nnu kattanum"
+  // If no time has been entered in this month at all (all days empty / 0 minutes worked):
+  const hasAnyTimeInMonth = totalWorkedMinutes > 0 || holidayWorkedDays > 0;
+  if (!hasAnyTimeInMonth) {
+    return {
+      monthName,
+      year,
+      totalDays,
+      weeklyOffCount,
+      workingDays,
+      presentDays: 0,
+      leaveDays: 0,
+      halfDaysCount: 0,
+      holidayWorkedDays: 0,
+      holidayWorkedSalary: 0,
+      basicSalary: 0,
+      perDaySalary,
+      dailyDutyHoursDecimal,
+      perHourRate,
+      loggedDaysCount: 0,
+      totalWorkedMinutes: 0,
+      totalWorkedFormatted: '00 H 00 M',
+      totalOtMinutes: 0,
+      totalOtFormatted: '00 H 00 M',
+
+      // Earnings
+      earnedBasicSalary: 0,
+      earlyIncentive: 0,
+      autoEarlyIncentive: 0,
+      isEarlyIncentiveAuto: true,
+      billCount: 0,
+      billIncentive: 0,
+      autoBillIncentive: 0,
+      autoBillCount: 0,
+      isBillIncentiveAuto: false,
+      leaveIncentive: 0,
+      leaveHolidayIncentive: 0,
+      leaveBonusDays: 0,
+      deductedLeaveDays: 0,
+      totalLeaveHolidayDays: 0,
+      isLeaveIncentiveEligible: false,
+      otIncentive: 0,
+      totalEarnings: 0,
+
+      // Deductions
+      pf: 0,
+      isPfDefault: true,
+      defaultPf: 0,
+      esi: 0,
+      isEsiDefault: true,
+      defaultEsi: 0,
+      advance: 0,
+      isAdvanceDefault: true,
+      defaultAdvance: 0,
+      halfDayDeduction: 0,
+      otherDeduction: 0,
+      isOtherDeductionDefault: true,
+      defaultOtherDeduction: 0,
+      totalDeductions: 0,
+      hasLastDayEndTime: false,
+      appliedDeductions: 0,
+
+      // Final Net & Split
+      netSalary: 0,
+      bankTransferAmount: 0,
+      cashInHandAmount: 0,
+    };
+  }
+
   // Check if the month's last date (e.g. 31 for Oct, 30 for Nov) has an End Time entered/logged
   const lastDayNumber = totalDays;
   const lastDayRecord = dailyEntries[lastDayNumber] || dailyEntries[String(lastDayNumber)];
@@ -268,43 +338,94 @@ export function calculateMonthlySalary(
     (activeSections && activeSections.some(s => typeof s.endTime === 'string' && s.endTime.trim() !== ''))
   );
 
-  // Count unworked manual unpaid leaves
+  const now = new Date();
+  const currentRealYear = now.getFullYear();
+  const currentRealMonthIdx = now.getMonth();
+  const currentRealDay = now.getDate();
+
+  const isPastMonth = year < currentRealYear || (year === currentRealYear && mIdx < currentRealMonthIdx);
+  const isCurrentMonth = year === currentRealYear && mIdx === currentRealMonthIdx;
+  const isMonthCompleted = isPastMonth || hasLastDayEndTime;
+
+  // Maximum day number among all logged days in this month
+  const loggedDayNumbers = Object.keys(activeEntriesMap)
+    .map(k => parseInt(k, 10))
+    .filter(n => !isNaN(n) && n >= 1 && n <= totalDays);
+  const maxLoggedDayNumber = loggedDayNumbers.length > 0 ? Math.max(...loggedDayNumbers) : 0;
+
+  // Evaluation upper bound for counting unentered working days:
+  // - If it's a past month (e.g. September): all days 1..totalDays are evaluated!
+  // - If month completed (last day has end time): all days 1..totalDays are evaluated!
+  // - If current month (e.g. October): evaluate up to today or highest logged day
+  let evalUpperDay = 0;
+  if (loggedDaysCount > 0 || manualLeavesList.length > 0) {
+    if (isPastMonth || hasLastDayEndTime) {
+      evalUpperDay = totalDays;
+    } else if (isCurrentMonth) {
+      evalUpperDay = Math.min(totalDays, Math.max(currentRealDay, maxLoggedDayNumber));
+    } else {
+      evalUpperDay = maxLoggedDayNumber;
+    }
+  }
+
+  // Count unentered regular working days as Leave:
+  // Requirement: "time Enter pannama iruntha Leave ah edukko (Ex. September month la 2 24 & 30 days) (1 day na 1 day kanakku eduththukko)"
+  let unenteredWorkingDaysCount = 0;
+  if (evalUpperDay > 0) {
+    for (let d = 1; d <= evalUpperDay; d++) {
+      const dt = new Date(year, mIdx, d);
+      const isSun = dt.getDay() === targetDayIdx;
+      const isHol = manualHolidaySet.has(d);
+      // Sundays and Holidays are official off-days (NEVER counted as Leave)
+      if (!isSun && !isHol) {
+        const entry = activeEntriesMap[d];
+        const hasTime = Boolean(
+          entry &&
+          entry.sections &&
+          entry.sections.some(
+            s => typeof s.startTime === 'string' && s.startTime.trim() !== '' && typeof s.endTime === 'string' && s.endTime.trim() !== ''
+          )
+        );
+        const totals = entry ? calculateTotalDuration(entry.sections) : { totalMinutes: 0 };
+        const isWorked = Boolean(hasTime || totals.totalMinutes > 0);
+        if (!isWorked) {
+          unenteredWorkingDaysCount++;
+        }
+      }
+    }
+  }
+
+  // Count unworked manual unpaid leaves (excluding Sundays and marked Holidays)
   let manualUnpaidLeavesCount = 0;
   for (const d of manualLeavesList) {
     if (d >= 1 && d <= totalDays) {
       const dt = new Date(year, mIdx, d);
       const isOff = dt.getDay() === targetDayIdx || manualHolidaySet.has(d);
       if (!isOff) {
-        const entry = dailyEntries[d] || dailyEntries[String(d)];
-        const totals = entry ? calculateTotalDuration(entry.sections) : { totalMinutes: 0 };
-        if (totals.totalMinutes === 0) {
-          manualUnpaidLeavesCount++;
-        }
+        manualUnpaidLeavesCount++;
       }
     }
   }
 
   // Business Rule:
-  // "LEAVE INCENTIVE la 'Leave' la ipothai kku 0 kattanum, month oda lost la thaan Leave Calculation aaganum"
-  // Manually marked Unpaid Leaves show immediately. At month end (hasLastDayEndTime), all unlogged working days are calculated.
-  const leaveDays = hasLastDayEndTime
-    ? Math.max(manualUnpaidLeavesCount, workingDays - presentDays)
-    : manualUnpaidLeavesCount;
+  // - Sundays and Marked Holidays are official off-days (NEVER counted as Leave)
+  // - Unentered regular working days count as Leave: 1 unentered working day = 1 day leave ("1 day na 1 day kanakku")
+  // - Combined with any explicitly marked manual leaves
+  const leaveDays = Math.max(manualUnpaidLeavesCount, unenteredWorkingDaysCount);
 
   // Business Rule: Tiered Leave + Holiday Incentive in EARNINGS
   // Requirement:
-  // "Holiday mark pannirunthu & Sunday time add panniruntha 'EARNINGS' la irukka 'Leave Incentive' la
-  // bonus 2 days + (Holiday or Sunday) salary add aaganum (2+1 or etc.),
-  // and next 'EARNINGS' la irukka 'Leave Incentive' change to 'Leave + Holiday Incentive'"
-  // Leave 0 => 2 Days Salary Bonus
-  // Leave 1 => 1 Day Salary Bonus
-  // Leave >= 2 => 0 Bonus
-  // Plus: Extra days worked on Sunday or Marked Holiday (holidayWorkedDays)
-  const leaveBonusDays = hasLastDayEndTime ? (leaveDays === 0 ? 2 : leaveDays === 1 ? 1 : 0) : 0;
+  // - Holiday added is an off day like Sunday (NEVER counted as Leave)
+  // - If no leave taken (Leave 0), employee gets 2 Days Salary Bonus
+  // - Leave 0 => 2 Days Salary Bonus
+  // - Leave 1 => 1 Day Salary Bonus
+  // - Leave >= 2 => 0 Bonus
+  // - Plus: Extra days worked on Sunday or Marked Holiday (holidayWorkedDays adds +1 day per worked off-day)
+  const leaveBonusDays = leaveDays === 0 ? 2 : leaveDays === 1 ? 1 : 0;
   const totalLeaveHolidayDays = leaveBonusDays + holidayWorkedDays;
   const leaveHolidayIncentive = Number((totalLeaveHolidayDays * perDaySalary).toFixed(2));
   const leaveIncentive = leaveHolidayIncentive;
-  const isLeaveIncentiveEligible = (hasLastDayEndTime && leaveDays <= 1 && workingDays > 0) || holidayWorkedDays > 0;
+  const isLeaveIncentiveEligible = leaveDays <= 1 || holidayWorkedDays > 0;
 
   // Holiday Worked Salary is now grouped directly in Leave + Holiday Incentive
   const holidayWorkedSalary = Number((holidayWorkedDays * perDaySalary).toFixed(2));
@@ -337,7 +458,7 @@ export function calculateMonthlySalary(
   // Requirement:
   // "EARNINGS" Basic salary "daily Complete" aana Earnings kattanum, Full month leave, sunday, HOliday Poga Complete aana 2 days Leave naalum, Basic Salary la "Settings La Basic salary" thaa kattanum
   const progressiveEarned = Number((presentDays * perDaySalary).toFixed(2));
-  const earnedRegularSalary = hasLastDayEndTime
+  const earnedRegularSalary = isMonthCompleted
     ? basicSalary
     : Math.min(basicSalary, progressiveEarned);
   const earnedBasicSalary = Number(earnedRegularSalary.toFixed(2));
@@ -383,8 +504,8 @@ export function calculateMonthlySalary(
   );
 
   // Requirement:
-  // Deductions are only subtracted from Net Salary when the month's last date has an end time!
-  const appliedDeductions = hasLastDayEndTime ? totalDeductions : 0;
+  // Deductions are applied when the month is completed or in past months!
+  const appliedDeductions = isMonthCompleted ? totalDeductions : 0;
 
   // Net Salary
   const netSalary = Number(Math.max(0, totalEarnings - appliedDeductions).toFixed(2));
@@ -395,7 +516,7 @@ export function calculateMonthlySalary(
   let bankTransfer = 0;
   let cashInHand = 0;
 
-  if (hasLastDayEndTime) {
+  if (isMonthCompleted) {
     // Priority: Whatever user configured in Settings for Bank Transfer comes directly
     if (typeof settings.bankTransferAmount === 'number' && settings.bankTransferAmount > 0) {
       bankTransfer = settings.bankTransferAmount;

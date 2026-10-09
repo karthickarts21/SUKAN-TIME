@@ -3,6 +3,7 @@ import { DayRecord, TimeEntry } from '../types';
 import { calculateTotalDuration, formatTotalMinutes } from '../utils/timeCalculator';
 import { getDaysInMonth, getYearFromDate, isSunday } from '../utils/dateUtils';
 import { createEmptyTimeEntry, MONTHS } from '../utils/storage';
+import { parseDutyHoursToMinutes } from '../utils/salaryCalculator';
 import {
   FileSpreadsheet,
   FileText,
@@ -17,6 +18,7 @@ interface DayRecordsTableProps {
   currentSections: [TimeEntry, TimeEntry, TimeEntry, TimeEntry];
   currentDate: string;
   manualHolidays?: number[];
+  dailyDutyHours?: string;
   onToggleHoliday?: (dayNumber: number) => void;
   onSaveDayRecord?: (dayNumber: number, record: DayRecord) => void;
   onDeleteDayRecord: (dayNumber: number) => void;
@@ -28,6 +30,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
   dailyEntries,
   currentDate,
   manualHolidays = [],
+  dailyDutyHours = '08:30',
   onToggleHoliday,
   onDeleteDayRecord,
   onLoadDayRecordToSheet,
@@ -36,6 +39,10 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
   const daysInMonth = getDaysInMonth(selectedMonth, currentYear);
   const mIdx = MONTHS.indexOf(selectedMonth as any);
   const mStr = (mIdx >= 0 ? mIdx + 1 : 1).toString().padStart(2, '0');
+
+  // Duty threshold for Half Day (e.g. 255 mins for 8.5h duty)
+  const dutyMins = parseDutyHoursToMinutes(dailyDutyHours);
+  const halfDutyMinsThreshold = Math.floor(dutyMins / 2);
 
   // Default to spreadsheet table view as requested
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
@@ -156,57 +163,64 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
         </div>
 
         {/* SUMMARY STATS CARDS (Grand Total, Total OT, Early Incentive) - In a single line (3 cols) */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
           {/* 1. Grand Total: Full time WITHOUT 8.5 hr deducted */}
-          <div className="bg-neutral-50 border border-neutral-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs">
-            <div className="flex items-center justify-between gap-1">
-              <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-neutral-500 truncate">
+          <div
+            className="bg-neutral-50/90 border border-neutral-300/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs min-w-0"
+            title="Grand Total: Full worked time"
+          >
+            <div>
+              <span className="block text-[11px] sm:text-xs font-extrabold text-neutral-900 tracking-tight leading-snug truncate">
                 Grand Total
               </span>
-              <span className="text-[8px] font-bold uppercase tracking-tight text-neutral-600 bg-neutral-200/70 px-1 py-0.2 rounded shrink-0">
+              <span className="block text-[9px] sm:text-[10px] font-semibold text-neutral-600 mt-0.5 truncate">
                 Full Time
               </span>
             </div>
-            <span className="font-mono font-extrabold text-xs sm:text-sm md:text-base text-neutral-900 tabular-nums mt-1 truncate">
+            <span className="font-mono font-black text-xs sm:text-sm md:text-base text-neutral-900 tabular-nums mt-1 leading-none truncate">
               {formatTotalMinutes(grandTotalMinutes)}
             </span>
           </div>
 
           {/* 2. Total OT: 8.5 hr deducted per day */}
-          <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs">
-            <div className="flex items-center justify-between gap-1">
-              <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-800 truncate">
+          <div
+            className="bg-emerald-50 border border-emerald-300/90 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs min-w-0"
+            title="Total Overtime beyond duty hours"
+          >
+            <div>
+              <span className="block text-[11px] sm:text-xs font-extrabold text-emerald-950 tracking-tight leading-snug truncate">
                 Total OT
               </span>
-              <span className="text-[8px] font-bold uppercase tracking-tight text-emerald-700 bg-emerald-100/70 px-1 py-0.2 rounded shrink-0">
-                -8.5h/day
+              <span className="block text-[9px] sm:text-[10px] font-semibold text-emerald-800 mt-0.5 truncate">
+                Overtime
               </span>
             </div>
-            <span className="font-mono font-extrabold text-xs sm:text-sm md:text-base text-emerald-900 tabular-nums mt-1 truncate">
+            <span className="font-mono font-black text-xs sm:text-sm md:text-base text-emerald-950 tabular-nums mt-1 leading-none truncate">
               {formatTotalMinutes(grandTotalOtMinutes)}
             </span>
           </div>
 
           {/* 3. Early Incentive Total */}
           <div
-            className={`rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs border ${
+            className={`rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs border min-w-0 ${
               grandTotalEarlyIncentive > 0
-                ? 'bg-emerald-50/50 border-emerald-200/80 text-emerald-950'
+                ? 'bg-emerald-50/80 border-emerald-300'
                 : grandTotalEarlyIncentive < 0
-                ? 'bg-rose-50/50 border-rose-200/80 text-rose-950'
-                : 'bg-neutral-50 border-neutral-200/80 text-neutral-800'
+                ? 'bg-rose-50/80 border-rose-300'
+                : 'bg-neutral-50/90 border-neutral-300/80'
             }`}
+            title="Early Arrival / Late Departure Incentive"
           >
-            <div className="flex items-center justify-between gap-1">
-              <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider truncate">
+            <div>
+              <span className="block text-[10px] sm:text-xs font-extrabold text-neutral-900 tracking-tight leading-snug truncate">
                 Early Incentive
               </span>
-              <span className="text-[8px] font-bold uppercase tracking-tight px-1 py-0.2 rounded shrink-0 bg-neutral-200/60 text-neutral-600">
+              <span className="block text-[9px] sm:text-[10px] font-semibold text-neutral-600 mt-0.5 truncate">
                 Attendance
               </span>
             </div>
             <span
-              className={`font-mono font-extrabold text-xs sm:text-sm md:text-base tabular-nums mt-1 truncate ${
+              className={`font-mono font-black text-xs sm:text-sm md:text-base tabular-nums mt-1 leading-none truncate ${
                 grandTotalEarlyIncentive > 0
                   ? 'text-emerald-700'
                   : grandTotalEarlyIncentive < 0
@@ -243,6 +257,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
               const isManualHol = manualHolidays.includes(entry.dayNumber);
               const isSaved = !!(dailyEntries[entry.dayNumber] || dailyEntries[String(entry.dayNumber)]);
               const entryCalc = isSaved ? calculateTotalDuration(entry.sections) : null;
+              const isHalfDay = !isSun && !isManualHol && isSaved && !!entryCalc && entryCalc.totalMinutes > 0 && entryCalc.totalMinutes < halfDutyMinsThreshold;
               const dateDisplay = `${selectedMonth.toUpperCase()} ${entry.dayNumber}`;
 
               return (
@@ -253,6 +268,8 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                       ? 'bg-rose-50/30 hover:bg-rose-50/50 border-rose-200/70'
                       : isManualHol
                       ? 'bg-amber-50/30 hover:bg-amber-50/50 border-amber-200/70'
+                      : isHalfDay
+                      ? 'bg-purple-50/80 hover:bg-purple-100/90 border-purple-300 shadow-2xs'
                       : 'bg-neutral-50/70 hover:bg-neutral-50 border-neutral-200/80'
                   }`}
                 >
@@ -264,6 +281,8 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                             ? 'text-rose-600'
                             : isManualHol
                             ? 'text-amber-600'
+                            : isHalfDay
+                            ? 'text-purple-950 font-black'
                             : 'text-neutral-900'
                         }`}
                       >
@@ -302,7 +321,11 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                   <div className="flex items-center justify-between text-xs pt-1 border-t border-neutral-200/60">
                     <div className="flex items-center gap-1">
                       <span className="text-[10px] font-medium text-neutral-500">Total:</span>
-                      <span className="font-mono font-bold text-neutral-900 tabular-nums text-[11px]">
+                      <span
+                        className={`font-mono font-bold tabular-nums text-[11px] ${
+                          isHalfDay ? 'text-purple-950 font-black' : 'text-neutral-900'
+                        }`}
+                      >
                         {isSaved ? entry.totalDuration : '-'}
                       </span>
                     </div>
@@ -365,6 +388,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                   const isManualHol = manualHolidays.includes(entry.dayNumber);
                   const isSaved = !!(dailyEntries[entry.dayNumber] || dailyEntries[String(entry.dayNumber)]);
                   const entryCalc = isSaved ? calculateTotalDuration(entry.sections) : null;
+                  const isHalfDay = !isSun && !isManualHol && isSaved && !!entryCalc && entryCalc.totalMinutes > 0 && entryCalc.totalMinutes < halfDutyMinsThreshold;
                   const dateDisplay = `${selectedMonth.toUpperCase()} ${entry.dayNumber}`;
 
                   return (
@@ -375,6 +399,8 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                           ? 'bg-rose-50/30 hover:bg-rose-50/55'
                           : isManualHol
                           ? 'bg-amber-50/30 hover:bg-amber-50/55'
+                          : isHalfDay
+                          ? 'bg-purple-50/80 hover:bg-purple-100/90 border-l-4 border-l-purple-600'
                           : 'hover:bg-neutral-50/70'
                       }`}
                     >
@@ -385,13 +411,17 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                               ? 'text-rose-600'
                               : isManualHol
                               ? 'text-amber-600'
+                              : isHalfDay
+                              ? 'text-purple-950 font-black'
                               : 'text-neutral-900'
                           }`}
                         >
                           {dateDisplay}
                         </span>
                       </td>
-                      <td className="px-1.5 sm:px-2 py-1.5 text-center font-mono font-bold text-neutral-900 tabular-nums text-[11px]">
+                      <td className={`px-1.5 sm:px-2 py-1.5 text-center font-mono font-bold tabular-nums text-[11px] ${
+                        isHalfDay ? 'text-purple-950 font-black' : 'text-neutral-900'
+                      }`}>
                         {isSaved ? entry.totalDuration : '-'}
                       </td>
                       <td className="px-1.5 sm:px-2 py-1.5 text-center font-mono font-bold text-emerald-800 tabular-nums text-[11px]">

@@ -668,6 +668,15 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
                 <span className="font-mono font-bold text-emerald-800">{salaryCalc.presentDays}</span>
               </div>
 
+              {(monthData.manualHolidays?.length || 0) > 0 && (
+                <div className="flex items-center justify-between py-0.5">
+                  <span className="text-neutral-600">Marked Holidays</span>
+                  <span className="font-mono font-bold text-amber-700">
+                    {monthData.manualHolidays?.length || 0} Day(s) (Off Day — Not Leave)
+                  </span>
+                </div>
+              )}
+
               <div className="flex items-center justify-between py-0.5">
                 <span className="text-neutral-600">Leave</span>
                 <span
@@ -676,6 +685,17 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
                   }`}
                 >
                   {salaryCalc.leaveDays}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between py-0.5">
+                <span className="text-neutral-600">Half Day</span>
+                <span
+                  className={`font-mono font-bold ${
+                    salaryCalc.halfDaysCount > 0 ? 'text-orange-700' : 'text-neutral-900'
+                  }`}
+                >
+                  {salaryCalc.halfDaysCount}
                 </span>
               </div>
 
