@@ -24,6 +24,41 @@ import firebaseConfig from '../../firebase-applet-config.json';
 import { AllMonthsData, MonthData, SalarySettings } from '../types';
 import { MONTHS } from '../utils/storage';
 
+/**
+ * Deep-cleans an object to ensure no `undefined` values are passed to Firestore.
+ * Firestore crashes if any property (even deeply nested) has value `undefined`.
+ */
+export function cleanForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) return null as any;
+  return JSON.parse(
+    JSON.stringify(data, (_, value) => (value === undefined ? undefined : value))
+  );
+}
+
+/**
+ * Gets the active user ID for Firestore operations.
+ * If user is authenticated, returns their UID.
+ * If not authenticated, returns a persistent local user id so database saves always work.
+ */
+export function getActiveUserId(): string {
+  if (auth.currentUser?.uid) {
+    return auth.currentUser.uid;
+  }
+  const storageKey = 'brotime_active_user_uid';
+  let uid = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null;
+  if (!uid) {
+    uid = 'user_default';
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(storageKey, uid);
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return uid;
+}
+
 // Initialize Firebase App
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
@@ -79,15 +114,12 @@ export async function saveUserSalarySettings(
 ): Promise<void> {
   try {
     const settingsRef = doc(db, 'users', userId, 'settings', 'salary');
-    await setDoc(
-      settingsRef,
-      {
-        userId,
-        ...settings,
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
+    const payload = cleanForFirestore({
+      userId,
+      ...settings,
+      updatedAt: new Date().toISOString(),
+    });
+    await setDoc(settingsRef, payload, { merge: true });
   } catch (err) {
     console.error('Error saving salary settings to Firestore:', err);
     throw err;
@@ -147,6 +179,7 @@ export async function deleteUserDayRecord(
 
 /**
  * Save a single month's data to Firestore under /users/{userId}/months/{monthName}
+ * Sanitizes all payload data deeply to remove undefined values so Firestore never rejects the write.
  */
 export async function saveUserMonthData(
   userId: string,
@@ -155,28 +188,110 @@ export async function saveUserMonthData(
 ): Promise<void> {
   try {
     const monthRef = doc(db, 'users', userId, 'months', monthName);
-    // Sanitize data before saving (remove undefined)
-    const payload: Record<string, any> = {
+
+    // Compute effective bill count across top-level and salaryData
+    const effectiveBillCount =
+      typeof monthData.billCount === 'number'
+        ? monthData.billCount
+        : typeof monthData.salaryData?.billCount === 'number'
+        ? monthData.salaryData.billCount
+        : 0;
+
+    const consolidatedSalaryData = {
+      ...(monthData.salaryData || {}),
+      billCount: effectiveBillCount,
+      billIncentiveManual: effectiveBillCount * 30,
+    };
+
+    // Sanitize data before saving (deep remove all undefined fields)
+    const rawPayload: Record<string, any> = {
       userId,
       monthName,
-      date: monthData.date,
+      date: monthData.date || '',
       sections: monthData.sections,
       dailyEntries: monthData.dailyEntries || {},
-      manualHolidays: monthData.manualHolidays || [],
-      manualLeaves: monthData.manualLeaves || [],
-      billCount: monthData.billCount ?? 0,
-      salaryData: monthData.salaryData || {},
+      manualHolidays: Array.isArray(monthData.manualHolidays) ? monthData.manualHolidays : [],
+      manualLeaves: Array.isArray(monthData.manualLeaves) ? monthData.manualLeaves : [],
+      manualHalfDays: Array.isArray(monthData.manualHalfDays) ? monthData.manualHalfDays : [],
+      billCount: effectiveBillCount,
+      salaryData: consolidatedSalaryData,
       updatedAt: new Date().toISOString(),
     };
     if (monthData.lastSavedAt) {
-      payload.lastSavedAt = monthData.lastSavedAt;
+      rawPayload.lastSavedAt = monthData.lastSavedAt;
     }
+
+    const payload = cleanForFirestore(rawPayload);
 
     // Overwrite the month doc completely so deleted daily entries or cleared data are truly removed
     await setDoc(monthRef, payload);
+
+    // Also update /app_data/current_month as a live mirror
+    setDoc(doc(db, 'app_data', 'current_month'), payload).catch(() => {});
   } catch (err) {
     console.error(`Error saving month ${monthName} to Firestore:`, err);
     throw err;
+  }
+}
+
+/**
+ * Save the entire application state (all months, daily logs, selected month, settings)
+ * to Firestore under /app_data/overall and /users/{userId}/overview/state.
+ */
+export async function saveOverallAppData(
+  userId: string,
+  data: {
+    selectedMonth: string;
+    months: AllMonthsData;
+    salarySettings?: SalarySettings;
+  }
+): Promise<void> {
+  try {
+    const rawPayload = {
+      userId,
+      selectedMonth: data.selectedMonth,
+      months: data.months,
+      salarySettings: data.salarySettings,
+      updatedAt: new Date().toISOString(),
+    };
+    const payload = cleanForFirestore(rawPayload);
+
+    await Promise.allSettled([
+      setDoc(doc(db, 'app_data', 'overall'), payload),
+      setDoc(doc(db, 'users', userId, 'overview', 'state'), payload),
+    ]);
+  } catch (err) {
+    console.error('Error saving overall app data to Firestore:', err);
+  }
+}
+
+/**
+ * Load overall app state from Firestore
+ */
+export async function getOverallAppData(
+  userId: string
+): Promise<{
+  selectedMonth?: string;
+  months?: AllMonthsData;
+  salarySettings?: SalarySettings;
+} | null> {
+  try {
+    // 1. Try user overview
+    const userOverviewSnap = await getDoc(doc(db, 'users', userId, 'overview', 'state'));
+    if (userOverviewSnap.exists()) {
+      return userOverviewSnap.data() as any;
+    }
+
+    // 2. Fallback to app_data/overall
+    const globalSnap = await getDoc(doc(db, 'app_data', 'overall'));
+    if (globalSnap.exists()) {
+      return globalSnap.data() as any;
+    }
+
+    return null;
+  } catch (err) {
+    console.warn('Note loading overall app data from Firestore:', err);
+    return null;
   }
 }
 
@@ -193,16 +308,27 @@ export async function getUserAllMonthsData(
       const snap = await getDoc(monthRef);
       if (snap.exists()) {
         const d = snap.data();
+        const effectiveBillCount =
+          typeof d.billCount === 'number'
+            ? d.billCount
+            : typeof d.salaryData?.billCount === 'number'
+            ? d.salaryData.billCount
+            : 0;
         return {
           monthName,
           data: {
             date: d.date,
             sections: d.sections,
             dailyEntries: d.dailyEntries || {},
-            manualHolidays: d.manualHolidays || [],
-            manualLeaves: d.manualLeaves || [],
-            billCount: d.billCount,
-            salaryData: d.salaryData,
+            manualHolidays: Array.isArray(d.manualHolidays) ? d.manualHolidays : [],
+            manualLeaves: Array.isArray(d.manualLeaves) ? d.manualLeaves : [],
+            manualHalfDays: Array.isArray(d.manualHalfDays) ? d.manualHalfDays : [],
+            billCount: effectiveBillCount,
+            salaryData: {
+              ...(d.salaryData || {}),
+              billCount: effectiveBillCount,
+              billIncentiveManual: effectiveBillCount * 30,
+            },
             lastSavedAt: d.lastSavedAt,
           } as MonthData,
         };
@@ -302,14 +428,25 @@ export function subscribeToMonthData(
     (snap) => {
       if (snap.exists()) {
         const d = snap.data();
+        const effectiveBillCount =
+          typeof d.billCount === 'number'
+            ? d.billCount
+            : typeof d.salaryData?.billCount === 'number'
+            ? d.salaryData.billCount
+            : 0;
         const data: MonthData = {
           date: d.date,
           sections: d.sections,
           dailyEntries: d.dailyEntries || {},
-          manualHolidays: d.manualHolidays || [],
-          manualLeaves: d.manualLeaves || [],
-          billCount: d.billCount,
-          salaryData: d.salaryData,
+          manualHolidays: Array.isArray(d.manualHolidays) ? d.manualHolidays : [],
+          manualLeaves: Array.isArray(d.manualLeaves) ? d.manualLeaves : [],
+          manualHalfDays: Array.isArray(d.manualHalfDays) ? d.manualHalfDays : [],
+          billCount: effectiveBillCount,
+          salaryData: {
+            ...(d.salaryData || {}),
+            billCount: effectiveBillCount,
+            billIncentiveManual: effectiveBillCount * 30,
+          },
           lastSavedAt: d.lastSavedAt,
         };
         onUpdate(monthName, data, d.updatedAt);

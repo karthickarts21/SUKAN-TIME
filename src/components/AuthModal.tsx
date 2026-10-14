@@ -332,7 +332,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
               <p className="text-[11px] text-neutral-600 leading-normal">
                 {isSignUp
-                  ? 'Create an account to securely save your BroTime attendance and salary records to Cloud Firestore.'
+                  ? 'Create an account to securely save your SalaryBro attendance and salary records to Cloud Firestore.'
                   : 'Sign in to access your cloud-saved attendance records, salary settings, and daily logs.'}
               </p>
 
@@ -415,7 +415,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <span>{isSignUp ? 'Creating Account...' : 'Signing In...'}</span>
                   </>
                 ) : (
-                  <span>{isSignUp ? 'Sign Up & Create Account' : 'Sign In to BroTime'}</span>
+                  <span>{isSignUp ? 'Sign Up & Create Account' : 'Sign In to SalaryBro'}</span>
                 )}
               </button>
 

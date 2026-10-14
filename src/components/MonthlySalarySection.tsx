@@ -609,7 +609,15 @@ export const MonthlySalarySection: React.FC<MonthlySalarySectionProps> = ({
                 <div>
                   <span className="font-semibold text-neutral-800 block">OT Incentive</span>
                   <span className="text-[10px] text-neutral-400">
-                    {salaryCalc.totalOtFormatted} @ ₹{salaryCalc.perHourRate}/hr
+                    {(salaryCalc.totalShortageMinutes || 0) > 0 ? (
+                      <span>
+                        Net: {salaryCalc.netPayableOtFormatted} (Gross: {salaryCalc.totalOtFormatted} - Shortage: {salaryCalc.totalShortageFormatted}) @ ₹{salaryCalc.perHourRate}/hr
+                      </span>
+                    ) : (
+                      <span>
+                        {salaryCalc.totalOtFormatted} @ ₹{salaryCalc.perHourRate}/hr
+                      </span>
+                    )}
                   </span>
                 </div>
                 <span className="font-mono font-bold text-indigo-700 tabular-nums">

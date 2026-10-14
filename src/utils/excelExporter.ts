@@ -40,7 +40,7 @@ const headerBorder: Partial<ExcelJS.Borders> = {
  */
 export async function exportMonthExcelReport(monthName: string, monthObj: MonthData): Promise<void> {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Salary Calculator App';
+  workbook.creator = 'SalaryBro App';
   workbook.created = new Date();
 
   const worksheet = workbook.addWorksheet(`${monthName} Report`, {
@@ -92,7 +92,7 @@ export async function exportMonthExcelReport(monthName: string, monthObj: MonthD
   // 1. Title Banner (Rows 1 & 2)
   worksheet.mergeCells('A1:Q1');
   const titleCell = worksheet.getCell('A1');
-  titleCell.value = `⏱ SALARY CALCULATOR — MONTHLY REPORT (${monthName.toUpperCase()})`;
+  titleCell.value = `⏱ SALARYBRO — MONTHLY REPORT (${monthName.toUpperCase()})`;
   titleCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
   titleCell.fill = {
     type: 'pattern',

@@ -43,12 +43,25 @@
         "sections": { "type": "array" },
         "dailyEntries": { "type": "object" },
         "manualHolidays": { "type": "array" },
+        "manualLeaves": { "type": "array" },
         "billCount": { "type": "number" },
         "salaryData": { "type": "object" },
         "lastSavedAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
       "required": ["userId", "monthName", "date"]
+    },
+    "OverallAppDataDoc": {
+      "title": "OverallAppDataDoc",
+      "description": "Overall app state backup including selected month and all months data",
+      "type": "object",
+      "properties": {
+        "selectedMonth": { "type": "string" },
+        "months": { "type": "object" },
+        "salarySettings": { "type": "object" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["selectedMonth"]
     }
   },
   "firestore": {
@@ -63,6 +76,10 @@
     "/users/{userId}/months/{monthName}": {
       "schema": "MonthDataDoc",
       "description": "Monthly time records and attendance logs"
+    },
+    "/app_data/{docId}": {
+      "schema": "OverallAppDataDoc",
+      "description": "Overall application state and backup"
     }
   }
 }

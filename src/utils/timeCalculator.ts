@@ -21,9 +21,14 @@ export function parseTimeToMinutes(timeStr: string, period: Period): number | nu
   let minutes = parseInt(parts[1], 10);
 
   if (isNaN(hours) || isNaN(minutes)) return null;
-  if (hours < 0 || hours > 12 || minutes < 0 || minutes > 59) return null;
+  if (hours < 0 || hours > 24 || minutes < 0 || minutes > 59) return null;
 
-  // Convert to 24-hour format
+  // If already in 24h format (hours > 12)
+  if (hours > 12) {
+    return hours * 60 + minutes;
+  }
+
+  // Convert standard 12-hour format
   if (hours === 12) {
     hours = period === 'AM' ? 0 : 12;
   } else {
@@ -33,6 +38,54 @@ export function parseTimeToMinutes(timeStr: string, period: Period): number | nu
   }
 
   return hours * 60 + minutes;
+}
+
+/**
+ * Convert 12-hour time ("HH:MM" + Period 'AM'|'PM') to 24-hour time string ("HH:MM").
+ */
+export function convert12To24(timeStr: string, period: Period): string {
+  if (!timeStr) return '';
+  const parts = timeStr.trim().split(':');
+  if (parts.length < 2) return timeStr;
+  let h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(m)) return timeStr;
+  if (period === 'AM') {
+    if (h === 12) h = 0;
+  } else {
+    if (h !== 12) h += 12;
+  }
+  return `${pad2(h)}:${pad2(m)}`;
+}
+
+/**
+ * Convert 24-hour time ("HH:MM") to 12-hour time object { timeStr: "HH:MM", period: Period }.
+ */
+export function convert24To12(time24: string): { timeStr: string; period: Period } {
+  if (!time24) return { timeStr: '', period: 'AM' };
+  const parts = time24.trim().split(':');
+  if (parts.length < 2) return { timeStr: time24, period: 'AM' };
+  let h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(m)) return { timeStr: time24, period: 'AM' };
+  const period: Period = (h >= 12 && h < 24) ? 'PM' : 'AM';
+  let h12 = h % 12;
+  if (h12 === 0) h12 = 12;
+  return {
+    timeStr: `${pad2(h12)}:${pad2(m)}`,
+    period,
+  };
+}
+
+/**
+ * Formats a time entry for display according to the chosen time format ('12h' or '24h').
+ */
+export function formatTimeDisplay(timeStr: string, period: Period, timeFormat: '12h' | '24h' = '12h'): string {
+  if (!timeStr) return '-';
+  if (timeFormat === '24h') {
+    return convert12To24(timeStr, period);
+  }
+  return `${timeStr} ${period}`;
 }
 
 /**
@@ -83,17 +136,34 @@ export function formatTotalMinutes(totalMinutes: number): string {
 }
 
 /**
- * Calculates Overtime (OT) by subtracting 8 Hours 30 Minutes (510 mins) from total minutes.
+ * Formats signed OT minutes into "+XX H YY M" or "-XX H YY M" or "00 H 00 M"
+ */
+export function formatSignedOtMinutes(otMinutes: number): string {
+  if (isNaN(otMinutes) || otMinutes === 0) {
+    return '00 H 00 M';
+  }
+  const isNeg = otMinutes < 0;
+  const absM = Math.abs(otMinutes);
+  const hours = Math.floor(absM / 60);
+  const mins = absM % 60;
+  const sign = isNeg ? '-' : '+';
+  return `${sign}${pad2(hours)} H ${pad2(mins)} M`;
+}
+
+/**
+ * Calculates Overtime (OT) by subtracting standard duty minutes (default 8 Hours 30 Minutes = 510 mins).
+ * If totalMinutes < standardMinutes, returns negative formatted "-XX H YY M".
  */
 export function calculateOvertime(totalMinutes: number, standardMinutes = 510): { formatted: string; minutes: number } {
-  const otMinutes = totalMinutes - standardMinutes;
-  if (otMinutes <= 0) {
+  if (totalMinutes <= 0) {
     return { formatted: '00 H 00 M', minutes: 0 };
   }
-  const hours = Math.floor(otMinutes / 60);
-  const minutes = otMinutes % 60;
+  const otMinutes = totalMinutes - standardMinutes;
+  if (otMinutes === 0) {
+    return { formatted: '00 H 00 M', minutes: 0 };
+  }
   return {
-    formatted: `${pad2(hours)} H ${pad2(minutes)} M`,
+    formatted: formatSignedOtMinutes(otMinutes),
     minutes: otMinutes,
   };
 }
@@ -101,7 +171,7 @@ export function calculateOvertime(totalMinutes: number, standardMinutes = 510): 
 /**
  * Sums the durations of all 4 sections and calculates OT (deducting 8.30 hours).
  */
-export function calculateTotalDuration(sections: [TimeEntry, TimeEntry, TimeEntry, TimeEntry]): {
+export function calculateTotalDuration(sections: [TimeEntry, TimeEntry, TimeEntry, TimeEntry] | TimeEntry[]): {
   durations: [string, string, string, string];
   totalFormatted: string;
   totalMinutes: number;
@@ -148,7 +218,10 @@ export interface EarlyIncentiveResult {
  * 3. Start <= 9:30 AM and End < 6:30 PM -> -150
  * 4. Start >= 9:31 AM and End < 6:30 PM -> -300
  */
-export function calculateEarlyIncentive(sections: TimeEntry[]): EarlyIncentiveResult {
+export function calculateEarlyIncentive(
+  sections: TimeEntry[],
+  dutyMinutes: number = 510
+): EarlyIncentiveResult {
   let firstStartMinutes: number | null = null;
   let latestEndMinutes: number | null = null;
   let hasEntries = false;
@@ -176,6 +249,21 @@ export function calculateEarlyIncentive(sections: TimeEntry[]): EarlyIncentiveRe
       formatted: '0',
       reason: 'Enter shift start & end times',
       hasEntries: false,
+    };
+  }
+
+  // Requirement: half day kku "Early Incentive" -150 varanum
+  // Check if worked duration qualifies as a Half Day (< half duty threshold)
+  const totals = calculateTotalDuration(sections);
+  const halfDutyMinsThreshold = Math.floor(dutyMinutes / 2);
+  const isHalfDay = totals.totalMinutes > 0 && totals.totalMinutes < halfDutyMinsThreshold;
+
+  if (isHalfDay) {
+    return {
+      amount: -150,
+      formatted: '-150',
+      reason: 'Half Day shift (-150)',
+      hasEntries: true,
     };
   }
 
@@ -283,4 +371,32 @@ export function calculateEarlyIncentive(sections: TimeEntry[]): EarlyIncentiveRe
 export function calculateBillIncentive(billCount: number): number {
   if (isNaN(billCount) || billCount <= 0) return 0;
   return Math.round(billCount * 30);
+}
+
+/**
+ * Returns the earliest start time in minutes from midnight for a set of sessions.
+ * Returns null if no valid start time is logged.
+ */
+export function getEarliestStartMinutes(sections: TimeEntry[]): number | null {
+  let firstStartMinutes: number | null = null;
+  for (const s of sections) {
+    if (s.startTime) {
+      const m = parseTimeToMinutes(s.startTime, s.startPeriod);
+      if (m !== null && (firstStartMinutes === null || m < firstStartMinutes)) {
+        firstStartMinutes = m;
+      }
+    }
+  }
+  return firstStartMinutes;
+}
+
+/**
+ * Returns true if the arrival time is strictly after 9:40 AM (> 580 minutes from midnight).
+ * 9:40 AM = 9 * 60 + 40 = 580 minutes.
+ */
+export function isLateArrivalAfter940(sections: TimeEntry[]): boolean {
+  const startM = getEarliestStartMinutes(sections);
+  if (startM === null) return false;
+  // 9:40 AM = 580 mins. If morning arrival after 9:40 AM (and not 9:30 PM / 1290)
+  return startM > 580 && startM < 1200;
 }

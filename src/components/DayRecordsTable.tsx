@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { DayRecord, TimeEntry } from '../types';
-import { calculateTotalDuration, formatTotalMinutes } from '../utils/timeCalculator';
-import { getDaysInMonth, getYearFromDate, isSunday } from '../utils/dateUtils';
+import { calculateTotalDuration, formatSignedOtMinutes, formatTotalMinutes, isLateArrivalAfter940 } from '../utils/timeCalculator';
+import { getDaysInMonth, getYearFromDate, isPastOrToday, isSunday } from '../utils/dateUtils';
 import { createEmptyTimeEntry, MONTHS } from '../utils/storage';
 import { parseDutyHoursToMinutes } from '../utils/salaryCalculator';
 import {
@@ -18,8 +18,11 @@ interface DayRecordsTableProps {
   currentSections: [TimeEntry, TimeEntry, TimeEntry, TimeEntry];
   currentDate: string;
   manualHolidays?: number[];
+  manualLeaves?: number[];
+  manualHalfDays?: number[];
   dailyDutyHours?: string;
   onToggleHoliday?: (dayNumber: number) => void;
+  onToggleLeave?: (dayNumber: number) => void;
   onSaveDayRecord?: (dayNumber: number, record: DayRecord) => void;
   onDeleteDayRecord: (dayNumber: number) => void;
   onLoadDayRecordToSheet: (record: DayRecord) => void;
@@ -30,8 +33,9 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
   dailyEntries,
   currentDate,
   manualHolidays = [],
+  manualLeaves = [],
+  manualHalfDays = [],
   dailyDutyHours = '08:30',
-  onToggleHoliday,
   onDeleteDayRecord,
   onLoadDayRecordToSheet,
 }) => {
@@ -47,8 +51,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
   // Default to spreadsheet table view as requested
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
 
-  // Build the list of records:
-  // All user-logged days + ALL Sundays and manual holidays in the month even if not logged!
+  // Build the list of records: Worked/logged entries + ALL Sundays & manual holidays for the selected month
   const allRecordsMap: Record<number, DayRecord> = {};
 
   // 1. Copy user-saved dailyEntries, guaranteeing dayNumber is a valid numeric key
@@ -62,7 +65,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
     }
   });
 
-  // 2. Add unlogged Sundays and manual holidays
+  // 2. Add ALL Sundays and manual holidays in the month even if not logged!
   for (let d = 1; d <= daysInMonth; d++) {
     const isSun = isSunday(d, selectedMonth, currentYear);
     const isManHol = manualHolidays.includes(d);
@@ -80,7 +83,7 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
         ],
         durations: ['-', '-', '-', '-'],
         totalDuration: '-',
-        otDuration: '-',
+        otDuration: '00 H 00 M',
         savedAt: '',
         isHoliday: true,
       };
@@ -93,8 +96,12 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
 
   const loggedCount = Object.keys(dailyEntries).length;
 
+  // Requirement: Sunday & Holiday worked time MUST NOT be added to total hr!
   const grandTotalMinutes = (Object.values(dailyEntries) as DayRecord[]).reduce(
     (acc: number, entry: DayRecord) => {
+      const isSun = isSunday(entry.dayNumber, selectedMonth, currentYear);
+      const isManualHol = manualHolidays.includes(entry.dayNumber);
+      if (isSun || isManualHol) return acc; // Exclude Sunday & Holiday worked hours from total hr
       const totals = calculateTotalDuration(entry.sections);
       return acc + totals.totalMinutes;
     },
@@ -103,6 +110,9 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
 
   const grandTotalOtMinutes = (Object.values(dailyEntries) as DayRecord[]).reduce(
     (acc: number, entry: DayRecord) => {
+      const isSun = isSunday(entry.dayNumber, selectedMonth, currentYear);
+      const isManualHol = manualHolidays.includes(entry.dayNumber);
+      if (isSun || isManualHol) return acc; // Exclude Sunday & Holiday OT
       const totals = calculateTotalDuration(entry.sections);
       return acc + totals.otMinutes;
     },
@@ -110,12 +120,20 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
   );
 
   const grandTotalEarlyIncentive = (Object.values(dailyEntries) as DayRecord[]).reduce(
-    (acc: number, entry: DayRecord) => acc + (entry.earlyIncentive || 0),
+    (acc: number, entry: DayRecord) => {
+      const isSun = isSunday(entry.dayNumber, selectedMonth, currentYear);
+      const isManualHol = manualHolidays.includes(entry.dayNumber);
+      if (isSun || isManualHol) return acc;
+      const totals = calculateTotalDuration(entry.sections);
+      const isHalf = totals.totalMinutes > 0 && totals.totalMinutes <= halfDutyMinsThreshold;
+      const inc = isHalf ? -150 : (entry.earlyIncentive || 0);
+      return acc + inc;
+    },
     0
   );
 
   return (
-    <aside className="w-full bg-white border border-neutral-200/90 rounded-2xl p-3 sm:p-4 shadow-xs flex flex-col h-full min-h-0 overflow-hidden">
+    <aside className="w-full bg-transparent sm:bg-white border-0 sm:border sm:border-neutral-200/90 rounded-none sm:rounded-2xl p-0 sm:p-4 shadow-none sm:shadow-xs flex flex-col h-full min-h-0 overflow-hidden">
       {/* HEADER */}
       <div className="pb-2.5 border-b border-neutral-100 flex flex-col gap-2 shrink-0">
         <div className="flex items-center justify-between">
@@ -133,120 +151,46 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
             </div>
           </div>
 
-          {/* VIEW SWITCHER */}
-          <div className="flex items-center bg-neutral-100 p-0.5 rounded-lg border border-neutral-200/60">
-            <button
-              type="button"
-              onClick={() => setViewMode('cards')}
-              className={`p-1.5 rounded-md text-xs transition-colors cursor-pointer ${
-                viewMode === 'cards'
-                  ? 'bg-white text-neutral-900 shadow-xs font-semibold'
-                  : 'text-neutral-500 hover:text-neutral-900'
-              }`}
-              title="Compact list view"
-            >
-              <List className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('table')}
-              className={`p-1.5 rounded-md text-xs transition-colors cursor-pointer ${
-                viewMode === 'table'
-                  ? 'bg-white text-neutral-900 shadow-xs font-semibold'
-                  : 'text-neutral-500 hover:text-neutral-900'
-              }`}
-              title="Spreadsheet table view"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* SUMMARY STATS CARDS (Grand Total, Total OT, Early Incentive) - In a single line (3 cols) */}
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-          {/* 1. Grand Total: Full time WITHOUT 8.5 hr deducted */}
-          <div
-            className="bg-neutral-50/90 border border-neutral-300/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs min-w-0"
-            title="Grand Total: Full worked time"
-          >
-            <div>
-              <span className="block text-[11px] sm:text-xs font-extrabold text-neutral-900 tracking-tight leading-snug truncate">
-                Grand Total
-              </span>
-              <span className="block text-[9px] sm:text-[10px] font-semibold text-neutral-600 mt-0.5 truncate">
-                Full Time
-              </span>
+          <div className="flex items-center gap-1">
+            <div className="flex items-center bg-neutral-100 p-0.5 rounded-lg border border-neutral-200">
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-colors flex items-center gap-1 cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-neutral-900 text-white shadow-2xs'
+                    : 'text-neutral-600 hover:text-neutral-900'
+                }`}
+                title="Spreadsheet Table View"
+              >
+                <FileSpreadsheet className="w-3 h-3" />
+                <span className="hidden sm:inline">Table</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-colors flex items-center gap-1 cursor-pointer ${
+                  viewMode === 'cards'
+                    ? 'bg-neutral-900 text-white shadow-2xs'
+                    : 'text-neutral-600 hover:text-neutral-900'
+                }`}
+                title="Compact Cards View"
+              >
+                <List className="w-3 h-3" />
+                <span className="hidden sm:inline">Cards</span>
+              </button>
             </div>
-            <span className="font-mono font-black text-xs sm:text-sm md:text-base text-neutral-900 tabular-nums mt-1 leading-none truncate">
-              {formatTotalMinutes(grandTotalMinutes)}
-            </span>
-          </div>
-
-          {/* 2. Total OT: 8.5 hr deducted per day */}
-          <div
-            className="bg-emerald-50 border border-emerald-300/90 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs min-w-0"
-            title="Total Overtime beyond duty hours"
-          >
-            <div>
-              <span className="block text-[11px] sm:text-xs font-extrabold text-emerald-950 tracking-tight leading-snug truncate">
-                Total OT
-              </span>
-              <span className="block text-[9px] sm:text-[10px] font-semibold text-emerald-800 mt-0.5 truncate">
-                Overtime
-              </span>
-            </div>
-            <span className="font-mono font-black text-xs sm:text-sm md:text-base text-emerald-950 tabular-nums mt-1 leading-none truncate">
-              {formatTotalMinutes(grandTotalOtMinutes)}
-            </span>
-          </div>
-
-          {/* 3. Early Incentive Total */}
-          <div
-            className={`rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs border min-w-0 ${
-              grandTotalEarlyIncentive > 0
-                ? 'bg-emerald-50/80 border-emerald-300'
-                : grandTotalEarlyIncentive < 0
-                ? 'bg-rose-50/80 border-rose-300'
-                : 'bg-neutral-50/90 border-neutral-300/80'
-            }`}
-            title="Early Arrival / Late Departure Incentive"
-          >
-            <div>
-              <span className="block text-[10px] sm:text-xs font-extrabold text-neutral-900 tracking-tight leading-snug truncate">
-                Early Incentive
-              </span>
-              <span className="block text-[9px] sm:text-[10px] font-semibold text-neutral-600 mt-0.5 truncate">
-                Attendance
-              </span>
-            </div>
-            <span
-              className={`font-mono font-black text-xs sm:text-sm md:text-base tabular-nums mt-1 leading-none truncate ${
-                grandTotalEarlyIncentive > 0
-                  ? 'text-emerald-700'
-                  : grandTotalEarlyIncentive < 0
-                  ? 'text-rose-700'
-                  : 'text-neutral-500'
-              }`}
-            >
-              {grandTotalEarlyIncentive > 0
-                ? `+₹${grandTotalEarlyIncentive}`
-                : grandTotalEarlyIncentive < 0
-                ? `-₹${Math.abs(grandTotalEarlyIncentive)}`
-                : '₹0'}
-            </span>
           </div>
         </div>
       </div>
 
-      {/* LOGS CONTENT AREA - SCROLLABLE INSIDE THIS CONTAINER ONLY */}
-      <div className="flex-1 mt-2 overflow-y-auto min-h-0 pr-1">
+      {/* CONTENT SCROLL AREA */}
+      <div className="flex-1 overflow-y-auto min-h-0 my-2 pr-0.5 space-y-2">
         {displayedDaysList.length === 0 ? (
-          <div className="text-center py-10 px-4 bg-neutral-50/60 rounded-xl border border-dashed border-neutral-200 my-auto">
-            <p className="text-xs font-semibold text-neutral-700">
-              No entries logged for {selectedMonth} yet
-            </p>
-            <p className="text-[11px] text-neutral-400 mt-1 max-w-[240px] mx-auto">
-              Enter session times and click <strong>SAVE DAY</strong>.
+          <div className="text-center py-8 bg-neutral-50 border border-dashed border-neutral-200 rounded-xl my-2">
+            <p className="text-xs font-semibold text-neutral-500">No records saved yet for {selectedMonth}</p>
+            <p className="text-[11px] text-neutral-400 mt-0.5">
+              Select a day and click "Save Day" to build monthly logs.
             </p>
           </div>
         ) : viewMode === 'cards' ? (
@@ -255,10 +199,33 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
             {displayedDaysList.map((entry) => {
               const isSun = isSunday(entry.dayNumber, selectedMonth, currentYear);
               const isManualHol = manualHolidays.includes(entry.dayNumber);
+              const hasTime = entry.sections && entry.sections.some(
+                (s) => (typeof s.startTime === 'string' && s.startTime.trim() !== '') || (typeof s.endTime === 'string' && s.endTime.trim() !== '')
+              );
+              const isPastOrCurr = isPastOrToday(entry.dayNumber, selectedMonth, currentYear);
+              const isManualLev = !isSun && !isManualHol && isPastOrCurr && (manualLeaves.includes(entry.dayNumber) || !!entry.isLeave || !hasTime);
+              const isManualHalf = manualHalfDays.includes(entry.dayNumber) || !!entry.isHalfDay;
               const isSaved = !!(dailyEntries[entry.dayNumber] || dailyEntries[String(entry.dayNumber)]);
               const entryCalc = isSaved ? calculateTotalDuration(entry.sections) : null;
-              const isHalfDay = !isSun && !isManualHol && isSaved && !!entryCalc && entryCalc.totalMinutes > 0 && entryCalc.totalMinutes < halfDutyMinsThreshold;
+              const totalMins = entryCalc ? entryCalc.totalMinutes : 0;
+
+              const isHalfDay = !isSun && !isManualHol && !isManualLev && (isManualHalf || (isSaved && totalMins > 0 && totalMins <= halfDutyMinsThreshold));
+              const isLate = isSaved && !isSun && !isManualHol && !isManualLev && isLateArrivalAfter940(entry.sections);
               const dateDisplay = `${selectedMonth.toUpperCase()} ${entry.dayNumber}`;
+
+              // Daily OT calculation:
+              // For Half Day: base duty is 4h 15m (255 mins) -> excess over 255 mins is OT (+), shortage is (-)
+              // For Regular Day: base duty is 8h 30m (510 mins) -> excess over 510 mins is OT (+), shortage is (-)
+              let otMins = 0;
+              let otFormatted = '00 H 00 M';
+              if (isSaved && !isSun && !isManualHol && !isManualLev && totalMins > 0) {
+                if (isHalfDay) {
+                  otMins = totalMins - halfDutyMinsThreshold;
+                } else {
+                  otMins = totalMins - dutyMins;
+                }
+                otFormatted = formatSignedOtMinutes(otMins);
+              }
 
               return (
                 <div
@@ -268,26 +235,50 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                       ? 'bg-rose-50/30 hover:bg-rose-50/50 border-rose-200/70'
                       : isManualHol
                       ? 'bg-amber-50/30 hover:bg-amber-50/50 border-amber-200/70'
+                      : isManualLev
+                      ? 'bg-rose-50/40 hover:bg-rose-50/60 border-rose-300'
                       : isHalfDay
-                      ? 'bg-purple-50/80 hover:bg-purple-100/90 border-purple-300 shadow-2xs'
+                      ? 'bg-orange-50/60 hover:bg-orange-100/60 border-orange-300 shadow-2xs'
                       : 'bg-neutral-50/70 hover:bg-neutral-50 border-neutral-200/80'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                       <span
                         className={`font-mono text-xs font-bold ${
                           isSun
                             ? 'text-rose-600'
                             : isManualHol
                             ? 'text-amber-600'
+                            : isManualLev
+                            ? 'text-rose-700'
                             : isHalfDay
-                            ? 'text-purple-950 font-black'
+                            ? 'text-orange-950 font-black'
                             : 'text-neutral-900'
                         }`}
                       >
                         {dateDisplay}
                       </span>
+                      {isManualLev && !isSun && (
+                        <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-rose-100 text-rose-800 border border-rose-200 uppercase">
+                          Leave
+                        </span>
+                      )}
+                      {isManualHol && !isSun && (
+                        <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-amber-100 text-amber-800 border border-amber-200 uppercase">
+                          Holiday
+                        </span>
+                      )}
+                      {isHalfDay && !isSun && (
+                        <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-orange-100 text-orange-950 border border-orange-300 uppercase">
+                          ½ Half
+                        </span>
+                      )}
+                      {isLate && !isSun && !isHalfDay && (
+                        <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-purple-100 text-purple-900 border border-purple-300 uppercase">
+                          Late
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1">
@@ -323,30 +314,49 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                       <span className="text-[10px] font-medium text-neutral-500">Total:</span>
                       <span
                         className={`font-mono font-bold tabular-nums text-[11px] ${
-                          isHalfDay ? 'text-purple-950 font-black' : 'text-neutral-900'
+                          isHalfDay ? 'text-orange-950 font-black' : 'text-neutral-900'
                         }`}
                       >
-                        {isSaved ? entry.totalDuration : '-'}
+                        {isSaved ? (isSun || isManualHol ? `${entry.totalDuration} (Ref)` : entry.totalDuration) : '-'}
                       </span>
                     </div>
+
+                    {/* OT COLUMN DISPLAY WITH CLEAR SIGNED SHORTAGE OR OVERTIME */}
                     <div className="flex items-center gap-1">
                       <span className="text-[10px] font-medium text-neutral-500">OT:</span>
-                      <span className="font-mono font-bold text-emerald-800 tabular-nums text-[11px]">
-                        {isSaved ? (entry.otDuration || entryCalc?.otFormatted) : '-'}
-                      </span>
-                    </div>
-                    {isSaved && entry.earlyIncentive !== undefined && entry.earlyIncentive !== 0 && (
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] font-medium text-neutral-500">Inc:</span>
+                      {isSaved ? (
                         <span
-                          className={`font-mono font-bold tabular-nums text-[11px] ${
-                            entry.earlyIncentive > 0 ? 'text-emerald-700' : 'text-rose-700'
+                          className={`font-mono font-bold tabular-nums text-[11px] px-1 py-0.2 rounded ${
+                            otMins < 0
+                              ? 'text-rose-700 bg-rose-50 border border-rose-200'
+                              : otMins > 0
+                              ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                              : 'text-neutral-600'
                           }`}
                         >
-                          {entry.earlyIncentive > 0 ? `+${entry.earlyIncentive}` : `${entry.earlyIncentive}`}
+                          {otFormatted}
                         </span>
-                      </div>
-                    )}
+                      ) : (
+                        <span className="text-neutral-400 font-mono text-[11px]">-</span>
+                      )}
+                    </div>
+
+                    {isSaved && (() => {
+                      const effectiveEarlyInc = isHalfDay ? -150 : entry.earlyIncentive;
+                      if (effectiveEarlyInc === undefined || effectiveEarlyInc === 0) return null;
+                      return (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-medium text-neutral-500">Inc:</span>
+                          <span
+                            className={`font-mono font-bold tabular-nums text-[11px] ${
+                              effectiveEarlyInc > 0 ? 'text-emerald-700' : 'text-rose-700'
+                            }`}
+                          >
+                            {effectiveEarlyInc > 0 ? `+${effectiveEarlyInc}` : `${effectiveEarlyInc}`}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* SESSIONS BREAKDOWN PILLS */}
@@ -354,12 +364,14 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {entry.sections.map((s, idx) => {
                         if (!s.startTime && !s.endTime) return null;
+                        const sStart = `${s.startTime}${s.startPeriod}`;
+                        const sEnd = `${s.endTime}${s.endPeriod}`;
                         return (
                           <span
                             key={idx}
                             className="px-1.5 py-0.5 bg-white border border-neutral-200/90 rounded text-[9px] font-mono text-neutral-600"
                           >
-                            S{idx + 1}: {s.startTime}{s.startPeriod}-{s.endTime}{s.endPeriod} ({entry.durations[idx]})
+                            S{idx + 1}: {sStart}-{sEnd} ({entry.durations[idx]})
                           </span>
                         );
                       })}
@@ -386,10 +398,31 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                 {displayedDaysList.map((entry) => {
                   const isSun = isSunday(entry.dayNumber, selectedMonth, currentYear);
                   const isManualHol = manualHolidays.includes(entry.dayNumber);
+                  const hasTime = entry.sections && entry.sections.some(
+                    (s) => (typeof s.startTime === 'string' && s.startTime.trim() !== '') || (typeof s.endTime === 'string' && s.endTime.trim() !== '')
+                  );
+                  const isPastOrCurr = isPastOrToday(entry.dayNumber, selectedMonth, currentYear);
+                  const isManualLev = !isSun && !isManualHol && isPastOrCurr && (manualLeaves.includes(entry.dayNumber) || !!entry.isLeave || !hasTime);
+                  const isManualHalf = manualHalfDays.includes(entry.dayNumber) || !!entry.isHalfDay;
                   const isSaved = !!(dailyEntries[entry.dayNumber] || dailyEntries[String(entry.dayNumber)]);
                   const entryCalc = isSaved ? calculateTotalDuration(entry.sections) : null;
-                  const isHalfDay = !isSun && !isManualHol && isSaved && !!entryCalc && entryCalc.totalMinutes > 0 && entryCalc.totalMinutes < halfDutyMinsThreshold;
+                  const totalMins = entryCalc ? entryCalc.totalMinutes : 0;
+
+                  const isHalfDay = !isSun && !isManualHol && !isManualLev && (isManualHalf || (isSaved && totalMins > 0 && totalMins <= halfDutyMinsThreshold));
+                  const isLate = isSaved && !isSun && !isManualHol && !isManualLev && isLateArrivalAfter940(entry.sections);
                   const dateDisplay = `${selectedMonth.toUpperCase()} ${entry.dayNumber}`;
+
+                  // Daily OT calculation for table:
+                  let otMins = 0;
+                  let otFormatted = '00 H 00 M';
+                  if (isSaved && !isSun && !isManualHol && !isManualLev && totalMins > 0) {
+                    if (isHalfDay) {
+                      otMins = totalMins - halfDutyMinsThreshold;
+                    } else {
+                      otMins = totalMins - dutyMins;
+                    }
+                    otFormatted = formatSignedOtMinutes(otMins);
+                  }
 
                   return (
                     <tr
@@ -399,49 +432,97 @@ export const DayRecordsTable: React.FC<DayRecordsTableProps> = ({
                           ? 'bg-rose-50/30 hover:bg-rose-50/55'
                           : isManualHol
                           ? 'bg-amber-50/30 hover:bg-amber-50/55'
+                          : isManualLev
+                          ? 'bg-rose-50/40 hover:bg-rose-50/60'
                           : isHalfDay
-                          ? 'bg-purple-50/80 hover:bg-purple-100/90 border-l-4 border-l-purple-600'
+                          ? 'bg-orange-50/60 hover:bg-orange-100/70 border-l-4 border-l-orange-500'
                           : 'hover:bg-neutral-50/70'
                       }`}
                     >
                       <td className="px-2 py-1.5 whitespace-nowrap text-[11px]">
-                        <span
-                          className={`inline-block font-mono text-[11px] font-bold ${
-                            isSun
-                              ? 'text-rose-600'
-                              : isManualHol
-                              ? 'text-amber-600'
-                              : isHalfDay
-                              ? 'text-purple-950 font-black'
-                              : 'text-neutral-900'
-                          }`}
-                        >
-                          {dateDisplay}
-                        </span>
+                        <div className="flex flex-col items-start leading-tight">
+                          <span
+                            className={`font-mono text-[11px] font-bold ${
+                              isSun
+                                ? 'text-rose-600'
+                                : isManualHol
+                                ? 'text-amber-600'
+                                : isManualLev
+                                ? 'text-rose-700'
+                                : isHalfDay
+                                ? 'text-orange-950 font-black'
+                                : 'text-neutral-900'
+                            }`}
+                          >
+                            {dateDisplay}
+                          </span>
+                          {(isManualLev || isManualHol || isHalfDay || isLate) && !isSun && (
+                            <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                              {isManualLev && (
+                                <span className="px-1 py-0.2 rounded text-[7px] font-bold bg-rose-100 text-rose-800 border border-rose-200 uppercase">
+                                  Leave
+                                </span>
+                              )}
+                              {isManualHol && (
+                                <span className="px-1 py-0.2 rounded text-[7px] font-bold bg-amber-100 text-amber-800 border border-amber-200 uppercase">
+                                  Holiday
+                                </span>
+                              )}
+                              {isHalfDay && (
+                                <span className="px-1 py-0.2 rounded text-[7px] font-bold bg-orange-100 text-orange-950 border border-orange-300 uppercase">
+                                  ½ Half
+                                </span>
+                              )}
+                              {isLate && (
+                                <span className="px-1 py-0.2 rounded text-[7px] font-bold bg-purple-100 text-purple-900 border border-purple-300 uppercase">
+                                  Late
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className={`px-1.5 sm:px-2 py-1.5 text-center font-mono font-bold tabular-nums text-[11px] ${
-                        isHalfDay ? 'text-purple-950 font-black' : 'text-neutral-900'
+                        isHalfDay ? 'text-orange-950 font-black' : 'text-neutral-900'
                       }`}>
-                        {isSaved ? entry.totalDuration : '-'}
+                        {isSaved ? (isSun || isManualHol ? `${entry.totalDuration} (Ref)` : entry.totalDuration) : '-'}
                       </td>
-                      <td className="px-1.5 sm:px-2 py-1.5 text-center font-mono font-bold text-emerald-800 tabular-nums text-[11px]">
-                        {isSaved ? (entry.otDuration || entryCalc?.otFormatted) : '-'}
-                      </td>
-                      <td className="px-1 sm:px-1.5 py-1.5 text-center font-mono font-bold tabular-nums text-[10px]">
-                        {isSaved && entry.earlyIncentive !== undefined && entry.earlyIncentive !== 0 ? (
+                      <td className="px-1.5 sm:px-2 py-1.5 text-center font-mono font-bold tabular-nums text-[11px]">
+                        {isSaved && !isSun && !isManualHol && !isManualLev ? (
                           <span
-                            className={`px-1 py-0.2 rounded font-bold text-[9px] ${
-                              entry.earlyIncentive > 0
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-rose-100 text-rose-800'
+                            className={`font-bold ${
+                              otMins < 0
+                                ? 'text-rose-700'
+                                : otMins > 0
+                                ? 'text-emerald-700'
+                                : 'text-neutral-600'
                             }`}
-                            title={`Early Incentive: ${entry.earlyIncentive}`}
                           >
-                            {entry.earlyIncentive > 0 ? `+${entry.earlyIncentive}` : entry.earlyIncentive}
+                            {otFormatted}
                           </span>
                         ) : (
-                          <span className="text-neutral-300">-</span>
+                          <span className="text-neutral-400">-</span>
                         )}
+                      </td>
+                      <td className="px-1 sm:px-1.5 py-1.5 text-center font-mono font-bold tabular-nums text-[10px]">
+                        {isSaved && (() => {
+                          const effectiveEarlyInc = isHalfDay ? -150 : entry.earlyIncentive;
+                          if (effectiveEarlyInc !== undefined && effectiveEarlyInc !== 0) {
+                            return (
+                              <span
+                                className={`px-1 py-0.2 rounded font-bold text-[9px] ${
+                                  effectiveEarlyInc > 0
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-rose-100 text-rose-800'
+                                }`}
+                                title={`Early Incentive: ${effectiveEarlyInc}`}
+                              >
+                                {effectiveEarlyInc > 0 ? `+${effectiveEarlyInc}` : effectiveEarlyInc}
+                              </span>
+                            );
+                          }
+                          return <span className="text-neutral-300">-</span>;
+                        })()}
                       </td>
                       <td className="px-1.5 sm:px-2 py-1.5 text-center whitespace-nowrap">
                         <div className="inline-flex items-center gap-0.5 sm:gap-1">

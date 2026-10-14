@@ -17,6 +17,7 @@ export interface DayRecord {
   savedAt: string;
   isHoliday?: boolean;
   isLeave?: boolean;
+  isHalfDay?: boolean;
   earlyIncentive?: number;
   billCount?: number;
   billIncentive?: number;
@@ -42,9 +43,12 @@ export interface MonthData {
   salaryData?: MonthSalaryData;
   manualHolidays?: number[]; // [e.g. 15, 26] days manually marked as Holiday
   manualLeaves?: number[];   // [e.g. 5, 12] days manually marked as Unpaid Leave
+  manualHalfDays?: number[]; // [e.g. 7, 18] days manually marked as Half Day
 }
 
 export type AllMonthsData = Record<string, MonthData>;
+
+export type TimeFormat = '12h' | '24h';
 
 export interface SalarySettings {
   basicSalary: number; // e.g. 25000 (editable)
@@ -57,6 +61,7 @@ export interface SalarySettings {
   defaultOtherDeduction?: number; // Default Other deduction
   bankTransferAmount?: number; // Fixed/Default Bank Transfer amount e.g. 25000
   bankTransferMode?: 'basic' | 'fixed' | 'full'; // 'basic' = Transfer Basic Salary, 'fixed' = Fixed Amount, 'full' = Full Net
+  timeFormat?: TimeFormat;     // '12h' (standard AM/PM) or '24h' (00:00 - 23:59)
 }
 
 export interface MonthSalaryCalculation {
@@ -79,6 +84,10 @@ export interface MonthSalaryCalculation {
   totalWorkedFormatted: string;
   totalOtMinutes: number;
   totalOtFormatted: string;
+  totalShortageMinutes?: number;
+  totalShortageFormatted?: string;
+  netPayableOtMinutes?: number;
+  netPayableOtFormatted?: string;
 
   // Earnings
   earnedBasicSalary: number;

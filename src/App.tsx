@@ -40,12 +40,18 @@ import {
   calculateBillIncentive,
   calculateEarlyIncentive,
   calculateTotalDuration,
+  formatSignedOtMinutes,
   EarlyIncentiveResult,
 } from './utils/timeCalculator';
-import { DEFAULT_SALARY_SETTINGS, loadSalarySettings, saveSalarySettings } from './utils/salaryCalculator';
+import {
+  DEFAULT_SALARY_SETTINGS,
+  loadSalarySettings,
+  parseDutyHoursToMinutes,
+  saveSalarySettings,
+} from './utils/salaryCalculator';
 import { exportMonthExcelReport } from './utils/excelExporter';
 import { exportMonthPdfReport } from './utils/pdfExporter';
-import { getYearFromDate, isSunday } from './utils/dateUtils';
+import { getYearFromDate, isPastOrToday, isSunday } from './utils/dateUtils';
 import { CalendarDays, Palmtree, Plus, RotateCcw, UserX, X } from 'lucide-react';
 
 export default function App() {
@@ -411,18 +417,64 @@ export default function App() {
       const newSections = [...existingMonth.sections] as [TimeEntry, TimeEntry, TimeEntry, TimeEntry];
       newSections[sectionIndex] = updated;
 
+      // Check if newSections has ANY entered time
+      const hasAnyTime = newSections.some(
+        (s) => (typeof s.startTime === 'string' && s.startTime.trim() !== '') || (typeof s.endTime === 'string' && s.endTime.trim() !== '')
+      );
+
+      const currentLeaves = Array.isArray(existingMonth.manualLeaves) ? [...existingMonth.manualLeaves] : [];
+      let updatedLeaves = currentLeaves;
+
+      if (hasAnyTime) {
+        // Time entered: automatically remove from Leave
+        updatedLeaves = currentLeaves.filter((d) => d !== currentDayNumber);
+      } else {
+        // No time entered: automatically add to Leave if past/today and not Sunday or Holiday
+        const isSun = isSunday(currentDayNumber, currentMonth, currentYear);
+        const isHol = (existingMonth.manualHolidays || []).includes(currentDayNumber);
+        const isPastOrCurr = isPastOrToday(currentDayNumber, currentMonth, currentYear);
+        if (!isSun && !isHol && isPastOrCurr && !updatedLeaves.includes(currentDayNumber)) {
+          updatedLeaves = [...updatedLeaves, currentDayNumber].sort((a, b) => a - b);
+        } else if (!isPastOrCurr) {
+          updatedLeaves = currentLeaves.filter((d) => d !== currentDayNumber);
+        }
+      }
+
+      // Also update dailyEntries if record exists for currentDayNumber
+      const updatedDailyEntries = { ...(existingMonth.dailyEntries || {}) };
+      if (updatedDailyEntries[currentDayNumber]) {
+        const isSun = isSunday(currentDayNumber, currentMonth, currentYear);
+        const isHol = (existingMonth.manualHolidays || []).includes(currentDayNumber);
+        const isPastOrCurr = isPastOrToday(currentDayNumber, currentMonth, currentYear);
+        updatedDailyEntries[currentDayNumber] = {
+          ...updatedDailyEntries[currentDayNumber],
+          sections: newSections,
+          isLeave: !hasAnyTime && !isSun && !isHol && isPastOrCurr,
+        };
+      }
+
+      const updatedMonth: MonthData = {
+        ...existingMonth,
+        sections: newSections,
+        manualLeaves: updatedLeaves,
+        dailyEntries: updatedDailyEntries,
+      };
+
       const nextState = {
         ...prev,
         months: {
           ...prev.months,
-          [currentMonth]: {
-            ...existingMonth,
-            sections: newSections,
-          },
+          [currentMonth]: updatedMonth,
         },
       };
 
       saveStorage(nextState);
+      const activeUid = auth.currentUser?.uid || currentUser?.uid;
+      if (activeUid) {
+        saveUserMonthData(activeUid, currentMonth, updatedMonth).catch((e) =>
+          console.error('Firestore save section change error:', e)
+        );
+      }
       return nextState;
     });
   };
@@ -561,9 +613,14 @@ export default function App() {
         months: {
           ...prev.months,
           [monthName]: {
+            ...existing,
             date: newDate,
             sections: sectionsToUse,
             dailyEntries: existing?.dailyEntries || {},
+            manualHolidays: Array.isArray(existing?.manualHolidays) ? existing.manualHolidays : [],
+            manualLeaves: Array.isArray(existing?.manualLeaves) ? existing.manualLeaves : [],
+            billCount: existing?.billCount,
+            salaryData: existing?.salaryData,
             lastSavedAt: existing?.lastSavedAt,
           },
         },
@@ -673,20 +730,35 @@ export default function App() {
       let updatedLeaves = currentLeaves;
 
       if (idx >= 0) {
+        // Unmarking Holiday
         updatedHolidays = currentHolidays.filter((d) => d !== dayNumber);
+        // If no time is logged for this day and not Sunday, revert to Leave
+        const dayRecord = cur.dailyEntries?.[dayNumber];
+        const daySections = dayRecord?.sections || (dayNumber === currentDayNumber ? cur.sections : undefined);
+        const hasTime = daySections ? daySections.some((s) => (s.startTime && s.startTime.trim() !== '') || (s.endTime && s.endTime.trim() !== '')) : false;
+        const isSun = isSunday(dayNumber, currentMonth, currentYear);
+        const isPastOrCurr = isPastOrToday(dayNumber, currentMonth, currentYear);
+        if (!hasTime && !isSun && isPastOrCurr && !updatedLeaves.includes(dayNumber)) {
+          updatedLeaves = [...updatedLeaves, dayNumber].sort((a, b) => a - b);
+        }
       } else {
+        // Marking Holiday: add to holidays, remove from manualLeaves
         updatedHolidays = [...currentHolidays, dayNumber].sort((a, b) => a - b);
-        // Remove from manualLeaves if it was marked as leave
         updatedLeaves = currentLeaves.filter((d) => d !== dayNumber);
       }
 
-      // Also update isHoliday on dailyEntries if record exists
+      // Also update isHoliday/isLeave on dailyEntries if record exists
       const updatedDailyEntries = { ...(cur.dailyEntries || {}) };
       if (updatedDailyEntries[dayNumber]) {
+        const isAddedHol = idx < 0;
+        const daySections = updatedDailyEntries[dayNumber].sections;
+        const hasTime = daySections ? daySections.some((s) => (s.startTime && s.startTime.trim() !== '') || (s.endTime && s.endTime.trim() !== '')) : false;
+        const isSun = isSunday(dayNumber, currentMonth, currentYear);
+        const isPastOrCurr = isPastOrToday(dayNumber, currentMonth, currentYear);
         updatedDailyEntries[dayNumber] = {
           ...updatedDailyEntries[dayNumber],
-          isHoliday: idx < 0,
-          isLeave: false,
+          isHoliday: isAddedHol,
+          isLeave: !isAddedHol && !isSun && !hasTime && isPastOrCurr,
         };
       }
 
@@ -712,6 +784,9 @@ export default function App() {
           console.error('Firestore save holiday error:', e)
         );
       }
+      const isAdded = idx < 0;
+      setLastSavedNotice(isAdded ? `Day ${dayNumber} marked as Holiday` : `Day ${dayNumber} unmarked from Holiday`);
+      setTimeout(() => setLastSavedNotice(''), 2500);
       return nextState;
     });
   };
@@ -770,6 +845,75 @@ export default function App() {
           console.error('Firestore save leave error:', e)
         );
       }
+      const isAdded = idx < 0;
+      setLastSavedNotice(isAdded ? `Day ${dayNumber} marked as Leave` : `Day ${dayNumber} unmarked from Leave`);
+      setTimeout(() => setLastSavedNotice(''), 2500);
+      return nextState;
+    });
+  };
+
+  // Handle manual Half Day toggle for Day Selector
+  const handleToggleHalfDay = (dayNumber: number) => {
+    setAppState((prev) => {
+      const cur = prev.months[currentMonth] || {
+        date: monthData.date,
+        sections: monthData.sections,
+        dailyEntries: {},
+      };
+      const currentHalfDays = Array.isArray(cur.manualHalfDays) ? [...cur.manualHalfDays] : [];
+      const currentHolidays = Array.isArray(cur.manualHolidays) ? [...cur.manualHolidays] : [];
+      const currentLeaves = Array.isArray(cur.manualLeaves) ? [...cur.manualLeaves] : [];
+
+      const idx = currentHalfDays.indexOf(dayNumber);
+      let updatedHalfDays: number[];
+      let updatedHolidays = currentHolidays;
+      let updatedLeaves = currentLeaves;
+
+      if (idx >= 0) {
+        updatedHalfDays = currentHalfDays.filter((d) => d !== dayNumber);
+      } else {
+        updatedHalfDays = [...currentHalfDays, dayNumber].sort((a, b) => a - b);
+        // Remove from holidays and leaves if present
+        updatedHolidays = currentHolidays.filter((d) => d !== dayNumber);
+        updatedLeaves = currentLeaves.filter((d) => d !== dayNumber);
+      }
+
+      const updatedDailyEntries = { ...(cur.dailyEntries || {}) };
+      if (updatedDailyEntries[dayNumber]) {
+        updatedDailyEntries[dayNumber] = {
+          ...updatedDailyEntries[dayNumber],
+          isHalfDay: idx < 0,
+          isHoliday: false,
+          isLeave: false,
+        };
+      }
+
+      const updatedMonth: MonthData = {
+        ...cur,
+        manualHalfDays: updatedHalfDays,
+        manualHolidays: updatedHolidays,
+        manualLeaves: updatedLeaves,
+        dailyEntries: updatedDailyEntries,
+      };
+
+      const nextState = {
+        ...prev,
+        months: {
+          ...prev.months,
+          [currentMonth]: updatedMonth,
+        },
+      };
+
+      saveStorage(nextState);
+      const activeUid = auth.currentUser?.uid || currentUser?.uid;
+      if (activeUid) {
+        saveUserMonthData(activeUid, currentMonth, updatedMonth).catch((e) =>
+          console.error('Firestore save half day error:', e)
+        );
+      }
+      const isAdded = idx < 0;
+      setLastSavedNotice(isAdded ? `Day ${dayNumber} marked as Half Day` : `Day ${dayNumber} unmarked from Half Day`);
+      setTimeout(() => setLastSavedNotice(''), 2500);
       return nextState;
     });
   };
@@ -777,27 +921,46 @@ export default function App() {
   // Explicit Save Handler: saves current day and automatically moves to the next day
   const handleExplicitSave = () => {
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dutyMins = parseDutyHoursToMinutes(salarySettings?.dailyDutyHours || '08:30');
+    const halfDutyMinsThreshold = Math.floor(dutyMins / 2);
     const calcResult = calculateTotalDuration(monthData.sections);
-    const incentiveResult = calculateEarlyIncentive(monthData.sections);
+    const incentiveResult = calculateEarlyIncentive(monthData.sections, dutyMins);
 
     const isSun = isSunday(currentDayNumber, currentMonth, currentYear);
     const isManHol = (monthData.manualHolidays || []).includes(currentDayNumber);
     const isManLeave = (monthData.manualLeaves || []).includes(currentDayNumber);
+    const isManHalf = (monthData.manualHalfDays || []).includes(currentDayNumber);
     const isOffDay = isSun || isManHol;
+    const isHalfDay = !isOffDay && (isManHalf || (calcResult.totalMinutes > 0 && calcResult.totalMinutes <= halfDutyMinsThreshold));
+    const effectiveEarlyInc = isOffDay ? 0 : (isHalfDay ? -150 : incentiveResult.amount);
+
+    let otDurationStr = '00 H 00 M';
+    if (!isOffDay && calcResult.totalMinutes > 0) {
+      if (isHalfDay) {
+        otDurationStr = formatSignedOtMinutes(calcResult.totalMinutes - halfDutyMinsThreshold);
+      } else {
+        otDurationStr = formatSignedOtMinutes(calcResult.totalMinutes - dutyMins);
+      }
+    }
 
     // Requirement:
     // "Holiday or Sunday kku 'Early Incentive & OT Incentive' kidaiyathu, Ethavathu any Start & End Time irunthaley 1 day salary (Leave + Holiday Incentive) add aaganum"
+    const hasAnyTime = monthData.sections.some((s) => (s.startTime && s.startTime.trim() !== '') || (s.endTime && s.endTime.trim() !== ''));
+    const isPastOrCurr = isPastOrToday(currentDayNumber, currentMonth, currentYear);
+    const actualIsLeave = !hasAnyTime && !isOffDay && isPastOrCurr;
+
     const newDayRecord: DayRecord = {
       date: `${currentMonth} Date ${currentDayNumber}`,
       dayNumber: currentDayNumber,
       sections: JSON.parse(JSON.stringify(monthData.sections)),
       durations: calcResult.durations,
       totalDuration: calcResult.totalFormatted,
-      otDuration: isOffDay ? '00 H 00 M' : calcResult.otFormatted,
+      otDuration: isOffDay ? '00 H 00 M' : otDurationStr,
       savedAt: timeStr,
-      earlyIncentive: isOffDay ? 0 : incentiveResult.amount,
+      earlyIncentive: effectiveEarlyInc,
       isHoliday: isOffDay,
-      isLeave: isManLeave,
+      isLeave: actualIsLeave,
+      isHalfDay: isHalfDay,
     };
 
     // Calculate next day number (advances to next day 1-31)
@@ -814,6 +977,14 @@ export default function App() {
         sections: monthData.sections,
         dailyEntries: {},
       };
+
+      const currentLeaves = Array.isArray(cur.manualLeaves) ? [...cur.manualLeaves] : [];
+      let updatedLeaves = currentLeaves;
+      if (hasAnyTime || !isPastOrCurr) {
+        updatedLeaves = currentLeaves.filter((d) => d !== currentDayNumber);
+      } else if (!isOffDay && !currentLeaves.includes(currentDayNumber)) {
+        updatedLeaves = [...currentLeaves, currentDayNumber].sort((a, b) => a - b);
+      }
 
       const updatedDailyEntries = {
         ...(cur.dailyEntries || {}),
@@ -835,6 +1006,7 @@ export default function App() {
         ...cur,
         date: nextDateStr,
         sections: nextSections,
+        manualLeaves: updatedLeaves,
         lastSavedAt: timeStr,
         dailyEntries: updatedDailyEntries,
       };
@@ -870,7 +1042,7 @@ export default function App() {
       dayNumber: currentDayNumber,
       totalFormatted: calcResult.totalFormatted,
       otFormatted: calcResult.otFormatted,
-      earlyIncentive: incentiveResult.amount,
+      earlyIncentive: effectiveEarlyInc,
     });
     setShowSavedAnimation(true);
 
@@ -1053,6 +1225,10 @@ export default function App() {
   const handleSaveSalarySettings = (newSettings: SalarySettings) => {
     setSalarySettings(newSettings);
     saveSalarySettings(newSettings);
+    setLastSavedNotice('Salary settings saved successfully');
+    setTimeout(() => {
+      setLastSavedNotice('');
+    }, 3000);
     const activeUid = auth.currentUser?.uid || currentUser?.uid;
     if (activeUid) {
       saveUserSalarySettings(activeUid, newSettings).catch((e) =>
@@ -1099,15 +1275,33 @@ export default function App() {
   );
 
   // Calculate total duration & early incentive for current active month sections
+  const dutyMins = parseDutyHoursToMinutes(salarySettings?.dailyDutyHours || '08:30');
+  const halfDutyMinsThreshold = Math.floor(dutyMins / 2);
   const rawTotalCalc = calculateTotalDuration(monthData.sections);
-  const rawEarlyInc = calculateEarlyIncentive(monthData.sections);
+  const rawEarlyInc = calculateEarlyIncentive(monthData.sections, dutyMins);
+
+  const isCurrentManHalf = (monthData.manualHalfDays || []).includes(currentDayNumber);
+  const isCurrentHalfDay = !isCurrentOffDay && (isCurrentManHalf || (rawTotalCalc.totalMinutes > 0 && rawTotalCalc.totalMinutes <= halfDutyMinsThreshold));
+
+  let activeOtMinutes = 0;
+  let activeOtFormatted = '00 H 00 M';
+  if (!isCurrentOffDay && rawTotalCalc.totalMinutes > 0) {
+    if (isCurrentHalfDay) {
+      activeOtMinutes = rawTotalCalc.totalMinutes - halfDutyMinsThreshold;
+      activeOtFormatted = formatSignedOtMinutes(activeOtMinutes);
+    } else {
+      activeOtMinutes = rawTotalCalc.totalMinutes - dutyMins;
+      activeOtFormatted = formatSignedOtMinutes(activeOtMinutes);
+    }
+  }
 
   // Requirement:
   // "Holiday or Sunday kku 'Early Incentive & OT Incentive' kidaiyathu, Ethavathu any Start & End Time irunthaley 1 day salary (Leave + Holiday Incentive) add aaganum"
   const totalCalculation = {
     ...rawTotalCalc,
-    otFormatted: isCurrentOffDay ? '00 H 00 M' : rawTotalCalc.otFormatted,
-    otMinutes: isCurrentOffDay ? 0 : rawTotalCalc.otMinutes,
+    totalFormatted: isCurrentOffDay && rawTotalCalc.totalMinutes > 0 ? `${rawTotalCalc.totalFormatted} (Ref)` : rawTotalCalc.totalFormatted,
+    otFormatted: activeOtFormatted,
+    otMinutes: activeOtMinutes,
   };
 
   const earlyIncentiveCalculation: EarlyIncentiveResult = isCurrentOffDay
@@ -1124,7 +1318,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F6F7F9] p-2 sm:p-2.5 xl:p-3 pb-20 xl:pb-3 flex flex-col w-full">
       {/* 1. OVERALL APPLICATION CONTAINER */}
-      <div className="w-full bg-white border border-neutral-200/80 rounded-2xl p-3 sm:p-3.5 xl:p-4 shadow-xs flex-1 flex flex-col space-y-3.5">
+      <div className="w-full bg-transparent sm:bg-white border-0 sm:border sm:border-neutral-200/80 rounded-none sm:rounded-2xl p-0.5 sm:p-3.5 xl:p-4 shadow-none sm:shadow-xs flex-1 flex flex-col space-y-3.5">
         {/* 2. TOP HEADER (Branding, Date, Month with Dropdown, and Action Controls: REPORT, CLEAR) */}
         <Header
           date={monthData.date}
@@ -1158,9 +1352,13 @@ export default function App() {
               dailyEntries={monthData.dailyEntries || {}}
               manualHolidays={monthData.manualHolidays || []}
               manualLeaves={monthData.manualLeaves || []}
+              manualHalfDays={monthData.manualHalfDays || []}
+              dailyDutyHours={salarySettings.dailyDutyHours}
+              activeSections={monthData.sections}
               onSelectDayNumber={handleSelectDayNumber}
               onToggleHoliday={handleToggleHoliday}
               onToggleLeave={handleToggleLeave}
+              onToggleHalfDay={handleToggleHalfDay}
             />
 
             {/* SESSIONS SECTION */}
@@ -1313,7 +1511,10 @@ export default function App() {
               selectedMonth={currentMonth}
               dailyEntries={monthData.dailyEntries || {}}
               manualHolidays={monthData.manualHolidays || []}
+              manualLeaves={monthData.manualLeaves || []}
+              manualHalfDays={monthData.manualHalfDays || []}
               onToggleHoliday={handleToggleHoliday}
+              onToggleLeave={handleToggleLeave}
               currentSections={monthData.sections}
               currentDate={monthData.date}
               dailyDutyHours={salarySettings.dailyDutyHours}
@@ -1338,7 +1539,7 @@ export default function App() {
 
         {/* 5. FOOTER: Powered by Karthi Designer with clickable link opening in new tab */}
         <footer className="w-full pt-2 pb-0.5 border-t border-neutral-200/80 flex items-center justify-center text-center text-xs text-neutral-500 font-medium tracking-wide shrink-0">
-          <span>Salary Calculator</span>
+          <span>SalaryBro</span>
           <span className="mx-2 text-neutral-400 font-bold">*</span>
           <span>Powered by </span>
           <a

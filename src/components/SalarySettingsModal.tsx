@@ -195,10 +195,8 @@ export const SalarySettingsModal: React.FC<SalarySettingsModalProps> = ({
       defaultOtherDeduction: defaultOtherDeductionInput,
       bankTransfer: bankTransferInput,
     });
-    setSavedNotice(true);
-    setTimeout(() => {
-      setSavedNotice(false);
-    }, 2500);
+    // Immediately close modal after saving as requested by user
+    onClose();
   };
 
   return (
@@ -978,7 +976,7 @@ export const SalarySettingsModal: React.FC<SalarySettingsModalProps> = ({
         {/* MODAL BOTTOM ACTION BAR */}
         <footer className="sticky bottom-0 z-20 bg-white border-t border-neutral-200/90 px-4 sm:px-6 py-3 flex items-center justify-end sm:justify-between shadow-xs shrink-0">
           <span className="hidden sm:inline text-xs text-neutral-500 font-medium">
-            Salary Calculator · HR Configuration
+            SalaryBro · HR Configuration
           </span>
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
             <button

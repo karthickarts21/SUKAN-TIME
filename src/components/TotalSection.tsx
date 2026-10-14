@@ -33,10 +33,26 @@ export const TotalSection: React.FC<TotalSectionProps> = ({
 
           {/* RIGHT: OVERTIME (OT) - EXACT SAME FORMAT */}
           <div className="space-y-1 text-right sm:text-left">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">
+            <span
+              className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wider block ${
+                otFormatted.startsWith('-')
+                  ? 'text-rose-700'
+                  : otFormatted.startsWith('+')
+                  ? 'text-emerald-800'
+                  : 'text-neutral-500'
+              }`}
+            >
               OVERTIME (OT)
             </span>
-            <div className="font-mono font-extrabold text-xl sm:text-2xl lg:text-3xl tracking-tight text-emerald-800 tabular-nums leading-none">
+            <div
+              className={`font-mono font-extrabold text-xl sm:text-2xl lg:text-3xl tracking-tight tabular-nums leading-none ${
+                otFormatted.startsWith('-')
+                  ? 'text-rose-700'
+                  : otFormatted.startsWith('+')
+                  ? 'text-emerald-800'
+                  : 'text-neutral-700'
+              }`}
+            >
               {otFormatted}
             </div>
           </div>

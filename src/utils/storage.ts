@@ -58,6 +58,9 @@ export function createDefaultMonthData(): MonthData {
       createEmptyTimeEntry(3),
     ],
     dailyEntries: {},
+    manualHolidays: [],
+    manualLeaves: [],
+    manualHalfDays: [],
     lastSavedAt: undefined,
   };
 }

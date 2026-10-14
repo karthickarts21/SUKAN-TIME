@@ -1,6 +1,6 @@
 {
-  "name": "Salary Calculator",
-  "description": "A clean, minimalist desktop-first month-wise time sheet and salary calculator application.",
+  "name": "SalaryBro",
+  "description": "A clean, minimalist month-wise time sheet and salary calculator application.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

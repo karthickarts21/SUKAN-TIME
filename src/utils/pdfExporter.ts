@@ -63,7 +63,7 @@ export async function exportMonthPdfReport(monthName: string, monthObj: MonthDat
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
-  doc.text(`SALARY CALCULATOR — MONTHLY REPORT: ${monthName.toUpperCase()} ${year}`, 40, 36);
+  doc.text(`SALARYBRO — MONTHLY REPORT: ${monthName.toUpperCase()} ${year}`, 40, 36);
 
   // Subtitle info
   doc.setFontSize(10);
@@ -240,7 +240,7 @@ export function generateSalarySlipDoc(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(203, 213, 225);
-  doc.text(`Pay Period: ${monthName.toUpperCase()} ${year} | BroTime Salary Calculator`, 40, 52);
+  doc.text(`Pay Period: ${monthName.toUpperCase()} ${year} | SalaryBro`, 40, 52);
 
   // Attendance & Days Overview Bar
   doc.setFillColor(248, 250, 252);
@@ -278,7 +278,12 @@ export function generateSalarySlipDoc(
     ['Early Arrival Incentive', `Rs. ${salaryCalc.earlyIncentive.toLocaleString()}`],
     [`Bill Incentive (${salaryCalc.autoBillCount} bills @ Rs. 30)`, `Rs. ${salaryCalc.billIncentive.toLocaleString()}`],
     [`Leave + Holiday Incentive (${salaryCalc.totalLeaveHolidayDays || 0} days)`, `Rs. ${salaryCalc.leaveIncentive.toLocaleString()}`],
-    [`Overtime (OT) Incentive (${(salaryCalc.totalOtMinutes / 60).toFixed(1)} hrs)`, `Rs. ${salaryCalc.otIncentive.toLocaleString()}`],
+    [
+      (salaryCalc.totalShortageMinutes || 0) > 0
+        ? `Overtime (OT) Incentive (Net ${salaryCalc.netPayableOtFormatted})`
+        : `Overtime (OT) Incentive (${(salaryCalc.totalOtMinutes / 60).toFixed(1)} hrs)`,
+      `Rs. ${salaryCalc.otIncentive.toLocaleString()}`,
+    ],
   ];
 
   const deductionsRows = [
@@ -426,7 +431,7 @@ export function generateSalarySlipDoc(
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.text(
-    `BroTime Salary Calculator · Generated on ${new Date().toLocaleDateString()}`,
+    `SalaryBro · Generated on ${new Date().toLocaleDateString()}`,
     pageWidth / 2,
     doc.internal.pageSize.getHeight() - 20,
     { align: 'center' }

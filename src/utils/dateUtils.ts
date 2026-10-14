@@ -45,3 +45,28 @@ export function getDaysInMonth(monthName: string, year?: number): number {
   const mIdx = getMonthIndex(monthName);
   return new Date(y, mIdx + 1, 0).getDate();
 }
+
+/**
+ * Returns true if the day of the given month & year is in the past or today (<= today).
+ * Returns false if it is in the future (> today).
+ */
+export function isPastOrToday(dayNumber: number, monthName: string, year?: number): boolean {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonthIdx = now.getMonth();
+  const currentDay = now.getDate();
+
+  const y = year || currentYear;
+  const mIdx = getMonthIndex(monthName);
+
+  if (y < currentYear) return true;
+  if (y > currentYear) return false;
+
+  // y === currentYear
+  if (mIdx < currentMonthIdx) return true;
+  if (mIdx > currentMonthIdx) return false;
+
+  // mIdx === currentMonthIdx
+  return dayNumber <= currentDay;
+}
+

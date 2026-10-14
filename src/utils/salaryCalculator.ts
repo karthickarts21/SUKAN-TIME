@@ -1,6 +1,7 @@
 import { DayRecord, MonthData, SalarySettings, MonthSalaryCalculation } from '../types';
-import { getDaysInMonth, getMonthIndex, getYearFromDate } from './dateUtils';
+import { getDaysInMonth, getMonthIndex, getYearFromDate, isPastOrToday } from './dateUtils';
 import { calculateTotalDuration, formatTotalMinutes } from './timeCalculator';
+import { MONTHS } from './storage';
 
 export const SALARY_SETTINGS_KEY = 'BROTIME_SALARY_SETTINGS';
 
@@ -15,6 +16,7 @@ export const DEFAULT_SALARY_SETTINGS: SalarySettings = {
   defaultOtherDeduction: 0,
   bankTransferAmount: 0,
   bankTransferMode: 'basic',
+  timeFormat: '12h',
 };
 
 /**
@@ -54,6 +56,7 @@ export function loadSalarySettings(): SalarySettings {
         ? parsed.bankTransferAmount
         : (typeof parsed.basicSalary === 'number' && parsed.basicSalary > 0 ? parsed.basicSalary : 0),
       bankTransferMode: parsed.bankTransferMode || 'basic',
+      timeFormat: parsed.timeFormat === '24h' ? '24h' : '12h',
     };
   } catch (err) {
     console.error('Failed to load salary settings', err);
@@ -170,6 +173,10 @@ export function calculateMonthlySalary(
   const manualLeavesList = Array.isArray(monthObj.manualLeaves) ? monthObj.manualLeaves : [];
   const manualLeaveSet = new Set(manualLeavesList);
 
+  // Manual Half Days marked explicitly by user
+  const manualHalfDaysList = Array.isArray(monthObj.manualHalfDays) ? monthObj.manualHalfDays : [];
+  const manualHalfDaySet = new Set(manualHalfDaysList);
+
   let nonOffManualHolidays = 0;
   for (const d of manualHolidaysList) {
     if (d >= 1 && d <= totalDays) {
@@ -214,6 +221,7 @@ export function calculateMonthlySalary(
 
   let totalWorkedMinutes = 0;
   let totalOtMinutes = 0;
+  let totalShortageMinutes = 0;
   let presentDays = 0;
   let holidayWorkedDays = 0;
   let halfDaysCount = 0;
@@ -236,21 +244,48 @@ export function calculateMonthlySalary(
       );
       if (hasAnyTime || totals.totalMinutes > 0) {
         holidayWorkedDays++;
-        totalWorkedMinutes += totals.totalMinutes;
-        // NOTE: No OT and No Early Incentive added for Holiday / Sunday work!
+        // NOTE: Worked hours on Sunday/Holiday are kept as reference and grant 1 day holiday salary, but are NOT added to total worked hours!
       }
     } else {
       totalWorkedMinutes += totals.totalMinutes;
-      totalOtMinutes += totals.otMinutes;
+
+      const isManualHalf = manualHalfDaySet.has(entry.dayNumber) || !!entry.isHalfDay;
+      const isHalfDay = isManualHalf || (totals.totalMinutes > 0 && totals.totalMinutes <= halfDutyMinsThreshold);
+
+      // Requirement:
+      // "Half kkum 4.15 hr ah half day ah eduthutu 4.15 hr kku mela irukka time ah OT la add pannanum, Yenna Half kku deduction irukku laa"
+      // If Half Day: base duty for half day is 4h 15m (255 mins / halfDutyMinsThreshold).
+      // Any worked time ABOVE 4h 15m is added to OT!
+      // Any worked time BELOW 4h 15m is added to shortage!
+      // (And Half Day has its half-day salary deduction).
+      // If Regular Day:
+      // - If totalMinutes >= dutyMins (8h 30m): OT is (totalMinutes - dutyMins)
+      // - If totalMinutes < dutyMins: shortage is (dutyMins - totalMinutes) which offsets OT at month end
+      if (isHalfDay) {
+        if (totals.totalMinutes > halfDutyMinsThreshold) {
+          totalOtMinutes += (totals.totalMinutes - halfDutyMinsThreshold);
+        } else if (totals.totalMinutes > 0 && totals.totalMinutes < halfDutyMinsThreshold) {
+          totalShortageMinutes += (halfDutyMinsThreshold - totals.totalMinutes);
+        }
+      } else {
+        if (totals.totalMinutes >= dutyMins) {
+          totalOtMinutes += (totals.totalMinutes - dutyMins);
+        } else if (totals.totalMinutes > 0) {
+          totalShortageMinutes += (dutyMins - totals.totalMinutes);
+        }
+      }
 
       // Sum automated early arrival / late departure incentive from daily records on regular working days only
-      if (entry.earlyIncentive !== undefined) {
+      // Requirement: half day kku "Early Incentive" -150 varanum
+      if (isHalfDay) {
+        autoEarlyIncentive += -150;
+      } else if (entry.earlyIncentive !== undefined) {
         autoEarlyIncentive += entry.earlyIncentive;
       }
 
-      if (totals.totalMinutes > 0) {
+      if (totals.totalMinutes > 0 || isManualHalf) {
         presentDays++;
-        if (totals.totalMinutes < halfDutyMinsThreshold) {
+        if (isHalfDay) {
           halfDaysCount++;
         }
       }
@@ -282,6 +317,10 @@ export function calculateMonthlySalary(
       totalWorkedFormatted: '00 H 00 M',
       totalOtMinutes: 0,
       totalOtFormatted: '00 H 00 M',
+      totalShortageMinutes: 0,
+      totalShortageFormatted: '00 H 00 M',
+      netPayableOtMinutes: 0,
+      netPayableOtFormatted: '00 H 00 M',
 
       // Earnings
       earnedBasicSalary: 0,
@@ -362,9 +401,9 @@ export function calculateMonthlySalary(
     if (isPastMonth || hasLastDayEndTime) {
       evalUpperDay = totalDays;
     } else if (isCurrentMonth) {
-      evalUpperDay = Math.min(totalDays, Math.max(currentRealDay, maxLoggedDayNumber));
+      evalUpperDay = Math.min(totalDays, currentRealDay);
     } else {
-      evalUpperDay = maxLoggedDayNumber;
+      evalUpperDay = 0;
     }
   }
 
@@ -395,13 +434,14 @@ export function calculateMonthlySalary(
     }
   }
 
-  // Count unworked manual unpaid leaves (excluding Sundays and marked Holidays)
+  // Count unworked manual unpaid leaves (excluding Sundays and marked Holidays, and excluding future days)
   let manualUnpaidLeavesCount = 0;
   for (const d of manualLeavesList) {
     if (d >= 1 && d <= totalDays) {
       const dt = new Date(year, mIdx, d);
       const isOff = dt.getDay() === targetDayIdx || manualHolidaySet.has(d);
-      if (!isOff) {
+      const isPastOrCurr = isPastOrToday(d, MONTHS[mIdx] || '', year);
+      if (!isOff && isPastOrCurr) {
         manualUnpaidLeavesCount++;
       }
     }
@@ -451,7 +491,12 @@ export function calculateMonthlySalary(
   const autoBillIncentive = billIncentive;
 
   const multiplier = settings.overtimeMultiplier && settings.overtimeMultiplier > 0 ? settings.overtimeMultiplier : 1;
-  const otHoursDecimal = totalOtMinutes / 60;
+  
+  // Requirement:
+  // "8.30 hr kku work panrathukku 1hr 5m balance kammiya irukkum laa, antha naalukkaana balance time ah monthoda lost la ot la erunthu eduthutu full time ah salary mattum calculation aagum, time ethum change aaga kudathu"
+  // Offset any shortage of standard duty time against total OT minutes for payable OT incentive:
+  const netPayableOtMinutes = Math.max(0, totalOtMinutes - totalShortageMinutes);
+  const otHoursDecimal = netPayableOtMinutes / 60;
   const otIncentive = Number((otHoursDecimal * perHourRate * multiplier).toFixed(2));
 
   // Earned Basic Salary (Fixed Monthly Basic Salary)
@@ -560,6 +605,10 @@ export function calculateMonthlySalary(
     totalWorkedFormatted: formatTotalMinutes(totalWorkedMinutes),
     totalOtMinutes,
     totalOtFormatted: formatTotalMinutes(totalOtMinutes),
+    totalShortageMinutes,
+    totalShortageFormatted: formatTotalMinutes(totalShortageMinutes),
+    netPayableOtMinutes,
+    netPayableOtFormatted: formatTotalMinutes(netPayableOtMinutes),
 
     // Earnings
     earnedBasicSalary,

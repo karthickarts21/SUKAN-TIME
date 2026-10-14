@@ -204,7 +204,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <div className="flex-1 min-w-0">
                 <span className="block text-xs font-bold text-amber-950">
-                  Install BroTime App
+                  Install SalaryBro App
                 </span>
                 <span className="block text-[10px] text-amber-700">
                   Add to Home Screen (Standalone App)
@@ -284,17 +284,17 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5 lg:gap-4">
         {/* ROW 1: BRANDING + MOBILE PROFILE ICON */}
         <div className="flex items-center justify-between gap-2 w-full lg:w-auto">
-          {/* BRANDING: Salary Calculator with logo.png */}
+          {/* BRANDING: SalaryBro with logo.png */}
           <div className="flex items-center gap-2 sm:gap-2.5">
             <img
               src="/logo.png"
-              alt="Salary Calculator Logo"
+              alt="SalaryBro Logo"
               className="w-7 h-7 sm:w-8 sm:h-8 object-contain shrink-0 bg-transparent border-0 shadow-none outline-none"
             />
             <div>
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <h1 className="text-base sm:text-2xl font-bold tracking-tight text-neutral-900 leading-tight">
-                  Salary Calculator
+                  SalaryBro
                 </h1>
                 {hasSavedData && (
                   <>
@@ -328,29 +328,31 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* ROW 2 (MOBILE) / INLINE CONTROLS (DESKTOP) */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full lg:w-auto">
-          {/* DATE & MONTH IN A SINGLE LINE ON MOBILE (grid-cols-2) */}
-          <div className="grid grid-cols-2 gap-2 w-full lg:w-auto lg:flex lg:items-center lg:gap-3">
-            {/* 1. DATE TEXT DISPLAY */}
-            <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1.5 bg-neutral-50/80 border border-neutral-200/70 rounded-lg min-w-0">
-              <Calendar className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-400 shrink-0">
-                DATE:
-              </span>
-              <span className="text-xs font-bold font-mono tracking-tight text-neutral-900 tabular-nums truncate">
-                {formattedDateDisplay}
-              </span>
+          {/* DATE ICON PICKER & FULL MONTH SELECTOR */}
+          <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto">
+            {/* 1. DATE ICON DISPLAY (NON-CLICKABLE AS REQUESTED) */}
+            <div className="relative shrink-0">
+              <div
+                className="h-9 px-2.5 bg-neutral-50 border border-neutral-200 rounded-lg flex items-center gap-1.5 shadow-2xs select-none"
+                title="Current Date"
+              >
+                <Calendar className="w-4 h-4 text-neutral-600 shrink-0" />
+                <span className="text-xs font-bold font-mono text-neutral-900 tabular-nums">
+                  {formattedDateDisplay}
+                </span>
+              </div>
             </div>
 
-            {/* 2. MONTH SELECTOR */}
-            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            {/* 2. MONTH SELECTOR (NO NAME TRUNCATION) */}
+            <div className="flex-1 sm:flex-initial flex items-center gap-1.5 min-w-[160px] sm:min-w-[180px]">
               <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">
                 MONTH:
               </span>
-              <div className="relative flex-1 flex items-center bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 hover:border-neutral-300 rounded-lg px-2 sm:px-2.5 py-1.5 shadow-2xs transition-colors min-w-0">
+              <div className="relative flex-1 flex items-center bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 hover:border-neutral-300 rounded-lg px-2.5 py-1.5 shadow-2xs transition-colors">
                 <select
                   value={selectedMonth}
                   onChange={(e) => onSelectMonth(e.target.value)}
-                  className="appearance-none bg-transparent w-full text-left pr-4 text-xs font-bold text-neutral-900 focus:outline-none cursor-pointer uppercase tracking-wider truncate"
+                  className="appearance-none bg-transparent w-full text-left pr-6 text-xs font-bold font-mono text-neutral-900 focus:outline-none cursor-pointer uppercase tracking-wider whitespace-nowrap"
                   aria-label="Select Month"
                 >
                   {MONTHS.map((m) => (

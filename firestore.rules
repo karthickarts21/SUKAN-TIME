@@ -18,17 +18,22 @@ service cloud.firestore {
 
     // User profile document and its subcollections
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read, write: if isOwner(userId) || !isSignedIn();
 
       // User's salary settings (/users/{userId}/settings/{settingId})
       match /settings/{settingId} {
-        allow read, write: if isOwner(userId);
+        allow read, write: if isOwner(userId) || !isSignedIn();
       }
 
       // User's monthly attendance and salary logs (/users/{userId}/months/{monthName})
       match /months/{monthName} {
-        allow read, write: if isOwner(userId);
+        allow read, write: if isOwner(userId) || !isSignedIn();
       }
+    }
+
+    // App overall data backup & real-time sync collection
+    match /app_data/{docId} {
+      allow read, write: if true;
     }
 
     // Test connection doc used to verify client connection

@@ -103,7 +103,7 @@ export const SalarySlipModal: React.FC<SalarySlipModalProps> = ({
                 ⏱
               </span>
               <h1 className="text-xl sm:text-2xl font-black tracking-tight text-neutral-900 uppercase">
-                BroTime Salary Slip
+                SalaryBro Salary Slip
               </h1>
             </div>
             <p className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">
@@ -178,7 +178,14 @@ export const SalarySlipModal: React.FC<SalarySlipModalProps> = ({
                   </span>
                 </div>
                 <div className="flex items-center justify-between pt-1">
-                  <span className="text-neutral-700">OT Incentive</span>
+                  <div>
+                    <span className="text-neutral-700 block">OT Incentive</span>
+                    {(salaryCalc.totalShortageMinutes || 0) > 0 && (
+                      <span className="text-[10px] text-neutral-400 block">
+                        Net: {salaryCalc.netPayableOtFormatted} (Gross: {salaryCalc.totalOtFormatted} - Shortage: {salaryCalc.totalShortageFormatted})
+                      </span>
+                    )}
+                  </div>
                   <span className="font-mono font-bold text-indigo-800">
                     ₹{salaryCalc.otIncentive.toLocaleString()}
                   </span>

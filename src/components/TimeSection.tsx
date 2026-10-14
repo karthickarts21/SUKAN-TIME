@@ -1,7 +1,7 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Clock, RotateCcw } from 'lucide-react';
 import { Period, TimeEntry } from '../types';
-import { calculateDuration } from '../utils/timeCalculator';
+import { calculateDuration, convert12To24, convert24To12 } from '../utils/timeCalculator';
 
 interface TimeSectionProps {
   sectionIndex: number;
@@ -10,6 +10,7 @@ interface TimeSectionProps {
   onClearSection: () => void;
   title?: string;
   subtitle?: string;
+  timeFormat?: '12h' | '24h';
 }
 
 const DEFAULT_METADATA = [
@@ -41,8 +42,103 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
   const displayTitle = title || meta.title;
   const displaySubtitle = subtitle || meta.subtitle;
 
+  const [startInput, setStartInput] = useState(() => entry.startTime || '');
+  const [endInput, setEndInput] = useState(() => entry.endTime || '');
+
+  // Keep local inputs in sync when entry changes externally
+  useEffect(() => {
+    setStartInput(entry.startTime || '');
+  }, [entry.startTime]);
+
+  useEffect(() => {
+    setEndInput(entry.endTime || '');
+  }, [entry.endTime]);
+
+  // Clean and auto format time string on blur
+  const cleanAndFormatTime = (raw: string) => {
+    let clean = raw.replace(/[^\d:]/g, '').trim();
+    if (!clean) return '';
+    const maxH = 12;
+    const minH = 1;
+
+    if (!clean.includes(':')) {
+      if (clean.length === 1 || clean.length === 2) {
+        let h = parseInt(clean, 10);
+        if (h > maxH) h = maxH;
+        if (h < minH) h = minH;
+        clean = `${h.toString().padStart(2, '0')}:00`;
+      } else if (clean.length === 3) {
+        let h = parseInt(clean.substring(0, 1), 10);
+        let m = parseInt(clean.substring(1), 10);
+        if (h > maxH) h = maxH;
+        if (m > 59) m = 59;
+        clean = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+      } else if (clean.length >= 4) {
+        let h = parseInt(clean.substring(0, 2), 10);
+        let m = parseInt(clean.substring(2, 4), 10);
+        if (h > maxH) h = maxH;
+        if (m > 59) m = 59;
+        clean = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+      }
+    } else {
+      const parts = clean.split(':');
+      let h = parseInt(parts[0] || '0', 10);
+      let m = parseInt(parts[1] || '0', 10);
+      if (isNaN(h)) h = minH;
+      if (isNaN(m)) m = 0;
+      if (h > maxH) h = maxH;
+      if (h < minH) h = minH;
+      if (m > 59) m = 59;
+      clean = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    }
+
+    return clean;
+  };
+
   const handleStartTimeChange = (val: string) => {
-    onChange({ ...entry, startTime: val });
+    setStartInput(val);
+    const trimmed = val.trim();
+    if (!trimmed) {
+      onChange({ ...entry, startTime: '' });
+      return;
+    }
+    // If complete HH:MM typed
+    if (/^\d{2}:\d{2}$/.test(trimmed)) {
+      onChange({ ...entry, startTime: trimmed });
+    }
+  };
+
+  const handleStartBlur = () => {
+    const formatted = cleanAndFormatTime(startInput);
+    setStartInput(formatted);
+    if (!formatted) {
+      onChange({ ...entry, startTime: '' });
+      return;
+    }
+    onChange({ ...entry, startTime: formatted });
+  };
+
+  const handleEndTimeChange = (val: string) => {
+    setEndInput(val);
+    const trimmed = val.trim();
+    if (!trimmed) {
+      onChange({ ...entry, endTime: '' });
+      return;
+    }
+    // If complete HH:MM typed
+    if (/^\d{2}:\d{2}$/.test(trimmed)) {
+      onChange({ ...entry, endTime: trimmed });
+    }
+  };
+
+  const handleEndBlur = () => {
+    const formatted = cleanAndFormatTime(endInput);
+    setEndInput(formatted);
+    if (!formatted) {
+      onChange({ ...entry, endTime: '' });
+      return;
+    }
+    onChange({ ...entry, endTime: formatted });
   };
 
   const handleStartPeriodToggle = () => {
@@ -50,51 +146,18 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
     onChange({ ...entry, startPeriod: nextPeriod });
   };
 
-  const handleEndTimeChange = (val: string) => {
-    onChange({ ...entry, endTime: val });
-  };
-
   const handleEndPeriodToggle = () => {
     const nextPeriod: Period = entry.endPeriod === 'AM' ? 'PM' : 'AM';
     onChange({ ...entry, endPeriod: nextPeriod });
   };
 
-  // Auto-format input like "930" -> "09:30" or "9" -> "09:00" on blur
-  const autoFormatTimeOnBlur = (val: string, field: 'startTime' | 'endTime') => {
-    let clean = val.replace(/[^\d:]/g, '').trim();
-    if (!clean) return;
-
-    if (!clean.includes(':')) {
-      if (clean.length === 1 || clean.length === 2) {
-        let h = parseInt(clean, 10);
-        if (h > 12) h = 12;
-        if (h < 1) h = 1;
-        clean = `${h.toString().padStart(2, '0')}:00`;
-      } else if (clean.length === 3) {
-        let h = parseInt(clean.substring(0, 1), 10);
-        let m = parseInt(clean.substring(1), 10);
-        clean = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-      } else if (clean.length === 4) {
-        let h = parseInt(clean.substring(0, 2), 10);
-        let m = parseInt(clean.substring(2), 10);
-        if (h > 12) h = 12;
-        clean = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-      }
-    } else {
-      const parts = clean.split(':');
-      let h = parseInt(parts[0] || '0', 10);
-      let m = parseInt(parts[1] || '0', 10);
-      if (isNaN(h)) h = 0;
-      if (isNaN(m)) m = 0;
-      if (h > 12) h = 12;
-      if (m > 59) m = 59;
-      clean = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-    }
-
-    onChange({ ...entry, [field]: clean });
+  const handleClear = () => {
+    setStartInput('');
+    setEndInput('');
+    onClearSection();
   };
 
-  const hasData = !!(entry.startTime || entry.endTime);
+  const hasData = !!(entry.startTime || entry.endTime || startInput || endInput);
 
   return (
     <div className="bg-white border border-neutral-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between transition-all hover:border-neutral-300">
@@ -116,8 +179,8 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
           {hasData && (
             <button
               type="button"
-              onClick={onClearSection}
-              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-neutral-400 hover:text-neutral-800 bg-neutral-100 hover:bg-neutral-200 rounded transition-colors"
+              onClick={handleClear}
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-neutral-400 hover:text-neutral-800 bg-neutral-100 hover:bg-neutral-200 rounded transition-colors cursor-pointer"
               title="Clear this session"
             >
               <RotateCcw className="w-2.5 h-2.5" />
@@ -126,117 +189,125 @@ export const TimeSection: React.FC<TimeSectionProps> = ({
           )}
         </div>
 
-        {/* INPUTS CONTAINER - COMPACT HEIGHT */}
+        {/* INPUTS CONTAINER - SINGLE LINE FOR START & END TIME */}
         <div className="space-y-2">
-          {/* START TIME */}
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-0.5">
-              START TIME
-            </label>
-            <div className="flex items-center gap-1.5">
-              <div className="relative flex-1 min-w-0 flex items-center">
-                <div
-                  className="absolute left-2.5 w-4 h-4 flex items-center justify-center text-neutral-400 pointer-events-none z-10"
-                  aria-hidden="true"
-                >
-                  <Clock className="w-3.5 h-3.5" />
-                </div>
-                <input
-                  ref={startTimeInputRef}
-                  type="text"
-                  placeholder="09:00"
-                  value={entry.startTime}
-                  onChange={(e) => handleStartTimeChange(e.target.value)}
-                  onBlur={(e) => autoFormatTimeOnBlur(e.target.value, 'startTime')}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Tab' && !e.shiftKey) {
-                      e.preventDefault();
-                      startPeriodBtnRef.current?.focus();
-                    }
-                  }}
-                  className="h-9 w-full bg-neutral-50/80 border border-neutral-200 hover:border-neutral-300 focus:bg-white focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 rounded-lg pl-8 pr-2.5 text-center font-mono text-sm font-semibold text-neutral-900 placeholder:text-neutral-400 tabular-nums transition-colors"
-                  aria-label={`${displayTitle} Start Time`}
-                />
+          <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+            {/* START TIME */}
+            <div>
+              <div className="flex items-center justify-between mb-0.5">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 truncate">
+                  START TIME
+                </label>
               </div>
-              <button
-                ref={startPeriodBtnRef}
-                type="button"
-                tabIndex={0}
-                onClick={handleStartPeriodToggle}
-                onKeyDown={(e) => {
-                  if (e.key === 'Tab' && !e.shiftKey) {
-                    e.preventDefault();
-                    endTimeInputRef.current?.focus();
-                  } else if (e.key === 'Tab' && e.shiftKey) {
-                    e.preventDefault();
-                    startTimeInputRef.current?.focus();
-                  } else if (e.key === ' ' || e.key === 'Enter' || e.key === 'a' || e.key === 'A' || e.key === 'p' || e.key === 'P') {
-                    e.preventDefault();
-                    handleStartPeriodToggle();
-                  }
-                }}
-                className="h-9 w-12 rounded-lg font-mono font-bold text-xs tracking-wider uppercase transition-all bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-900 shadow-2xs cursor-pointer flex items-center justify-center shrink-0 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1"
-                title="Click or press Space / Enter / A / P to toggle AM / PM"
-                aria-label={`${displayTitle} Start Period: ${entry.startPeriod}`}
-              >
-                {entry.startPeriod}
-              </button>
-            </div>
-          </div>
-
-          {/* END TIME */}
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-0.5">
-              END TIME
-            </label>
-            <div className="flex items-center gap-1.5">
-              <div className="relative flex-1 min-w-0 flex items-center">
-                <div
-                  className="absolute left-2.5 w-4 h-4 flex items-center justify-center text-neutral-400 pointer-events-none z-10"
-                  aria-hidden="true"
-                >
-                  <Clock className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-1">
+                <div className="relative flex-1 min-w-0 flex items-center">
+                  <div
+                    className="absolute left-2 w-3.5 h-3.5 flex items-center justify-center text-neutral-400 pointer-events-none z-10"
+                    aria-hidden="true"
+                  >
+                    <Clock className="w-3 h-3" />
+                  </div>
+                  <input
+                    ref={startTimeInputRef}
+                    type="text"
+                    placeholder="09:00"
+                    value={startInput}
+                    onChange={(e) => handleStartTimeChange(e.target.value)}
+                    onBlur={handleStartBlur}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Tab' && !e.shiftKey) {
+                        e.preventDefault();
+                        startPeriodBtnRef.current?.focus();
+                      }
+                    }}
+                    className="h-9 w-full bg-neutral-50/80 border border-neutral-200 hover:border-neutral-300 focus:bg-white focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 rounded-lg pl-6 pr-1 text-center font-mono text-xs sm:text-sm font-semibold text-neutral-900 placeholder:text-neutral-400 tabular-nums transition-colors"
+                    aria-label={`${displayTitle} Start Time`}
+                  />
                 </div>
-                <input
-                  ref={endTimeInputRef}
-                  type="text"
-                  placeholder="01:00"
-                  value={entry.endTime}
-                  onChange={(e) => handleEndTimeChange(e.target.value)}
-                  onBlur={(e) => autoFormatTimeOnBlur(e.target.value, 'endTime')}
+
+                <button
+                  ref={startPeriodBtnRef}
+                  type="button"
+                  tabIndex={0}
+                  onClick={handleStartPeriodToggle}
                   onKeyDown={(e) => {
                     if (e.key === 'Tab' && !e.shiftKey) {
                       e.preventDefault();
-                      endPeriodBtnRef.current?.focus();
+                      endTimeInputRef.current?.focus();
                     } else if (e.key === 'Tab' && e.shiftKey) {
                       e.preventDefault();
-                      startPeriodBtnRef.current?.focus();
+                      startTimeInputRef.current?.focus();
+                    } else if (e.key === ' ' || e.key === 'Enter' || e.key === 'a' || e.key === 'A' || e.key === 'p' || e.key === 'P') {
+                      e.preventDefault();
+                      handleStartPeriodToggle();
                     }
                   }}
-                  className="h-9 w-full bg-neutral-50/80 border border-neutral-200 hover:border-neutral-300 focus:bg-white focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 rounded-lg pl-8 pr-2.5 text-center font-mono text-sm font-semibold text-neutral-900 placeholder:text-neutral-400 tabular-nums transition-colors"
-                  aria-label={`${displayTitle} End Time`}
-                />
+                  className="h-9 w-10 sm:w-11 rounded-lg font-mono font-bold text-xs tracking-wider uppercase transition-all bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-900 shadow-2xs cursor-pointer flex items-center justify-center shrink-0 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1"
+                  title="Click or press Space / Enter / A / P to toggle AM / PM"
+                  aria-label={`${displayTitle} Start Period: ${entry.startPeriod}`}
+                >
+                  {entry.startPeriod}
+                </button>
               </div>
-              <button
-                ref={endPeriodBtnRef}
-                type="button"
-                tabIndex={0}
-                onClick={handleEndPeriodToggle}
-                onKeyDown={(e) => {
-                  if (e.key === 'Tab' && e.shiftKey) {
-                    e.preventDefault();
-                    endTimeInputRef.current?.focus();
-                  } else if (e.key === ' ' || e.key === 'Enter' || e.key === 'a' || e.key === 'A' || e.key === 'p' || e.key === 'P') {
-                    e.preventDefault();
-                    handleEndPeriodToggle();
-                  }
-                }}
-                className="h-9 w-12 rounded-lg font-mono font-bold text-xs tracking-wider uppercase transition-all bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-900 shadow-2xs cursor-pointer flex items-center justify-center shrink-0 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1"
-                title="Click or press Space / Enter / A / P to toggle AM / PM"
-                aria-label={`${displayTitle} End Period: ${entry.endPeriod}`}
-              >
-                {entry.endPeriod}
-              </button>
+            </div>
+
+            {/* END TIME */}
+            <div>
+              <div className="flex items-center justify-between mb-0.5">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 truncate">
+                  END TIME
+                </label>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="relative flex-1 min-w-0 flex items-center">
+                  <div
+                    className="absolute left-2 w-3.5 h-3.5 flex items-center justify-center text-neutral-400 pointer-events-none z-10"
+                    aria-hidden="true"
+                  >
+                    <Clock className="w-3 h-3" />
+                  </div>
+                  <input
+                    ref={endTimeInputRef}
+                    type="text"
+                    placeholder="01:00"
+                    value={endInput}
+                    onChange={(e) => handleEndTimeChange(e.target.value)}
+                    onBlur={handleEndBlur}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Tab' && !e.shiftKey) {
+                        e.preventDefault();
+                        endPeriodBtnRef.current?.focus();
+                      } else if (e.key === 'Tab' && e.shiftKey) {
+                        e.preventDefault();
+                        startPeriodBtnRef.current?.focus();
+                      }
+                    }}
+                    className="h-9 w-full bg-neutral-50/80 border border-neutral-200 hover:border-neutral-300 focus:bg-white focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 rounded-lg pl-6 pr-1 text-center font-mono text-xs sm:text-sm font-semibold text-neutral-900 placeholder:text-neutral-400 tabular-nums transition-colors"
+                    aria-label={`${displayTitle} End Time`}
+                  />
+                </div>
+
+                <button
+                  ref={endPeriodBtnRef}
+                  type="button"
+                  tabIndex={0}
+                  onClick={handleEndPeriodToggle}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && e.shiftKey) {
+                      e.preventDefault();
+                      endTimeInputRef.current?.focus();
+                    } else if (e.key === ' ' || e.key === 'Enter' || e.key === 'a' || e.key === 'A' || e.key === 'p' || e.key === 'P') {
+                      e.preventDefault();
+                      handleEndPeriodToggle();
+                    }
+                  }}
+                  className="h-9 w-10 sm:w-11 rounded-lg font-mono font-bold text-xs tracking-wider uppercase transition-all bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-900 shadow-2xs cursor-pointer flex items-center justify-center shrink-0 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-1"
+                  title="Click or press Space / Enter / A / P to toggle AM / PM"
+                  aria-label={`${displayTitle} End Period: ${entry.endPeriod}`}
+                >
+                  {entry.endPeriod}
+                </button>
+              </div>
             </div>
           </div>
 
